@@ -1,11 +1,13 @@
 package goflip
 
-import log "github.com/Sirupsen/logrus"
+import (
+	log "github.com/Sirupsen/logrus"
+)
 
 type GoFlip struct {
 	devices         arduinos
 	Scores          []int
-	BallInPlay      int
+	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
 	MaxPlayers      int
@@ -13,6 +15,19 @@ type GoFlip struct {
 	SolenoidControl chan deviceMessage
 	SwitchEvents    chan SwitchEvent
 	switchStates    []bool
+	lampStates      map[int]int
+	Observers       []Observer
+	CurrentPlayer   int
+}
+
+type Observer interface {
+	Init()                     //Called from the beginning when the game is first turned on
+	GameStart()                //Called when a game starts
+	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
+	PlayerEnd(int)             //called when a player ends. Same as BallDrained, unless there is a ball save
+	SwitchHandler(SwitchEvent) //called every time a switch event occurs
+	BallDrained()              //calls when a ball is drained
+	GameOver()                 //called when a game is over
 }
 
 type SwitchEvent struct {
@@ -21,10 +36,10 @@ type SwitchEvent struct {
 }
 
 const (
-	off       = 0    //can be used for Solenoids or Lamp
-	on        = 1    //can be used for Solenoids or Lamp
-	slowBlink = 2    //lamp Only
-	fastBlink = 3    //lamp Only
+	Off       = 0    //can be used for Solenoids or Lamp
+	On        = 1    //can be used for Solenoids or Lamp
+	SlowBlink = 2    //lamp Only
+	FastBlink = 3    //lamp Only
 	ack       = iota //when used, it doesn't matter what ID is.
 )
 
@@ -35,7 +50,8 @@ type deviceMessage struct {
 	value int //set to one of the constants
 }
 
-func (g *GoFlip) Init() bool {
+//Init is Called just one time in the beginning to Initialize the game
+func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	if !consoleMode {
 		if !g.devices.Connect() {
@@ -48,14 +64,16 @@ func (g *GoFlip) Init() bool {
 	g.SolenoidControl = make(chan deviceMessage, 100)
 	g.SwitchEvents = make(chan SwitchEvent, 100)
 
-	//read from a config..but for now, we hard code.
+	//These can be overriddden after Init, before Start is called
 	g.MaxPlayers = 2
 	g.TotalBalls = 3
 	g.switchStates = make([]bool, 64)
-	return true
-}
+	g.lampStates = make(map[int]int)
 
-func (g *GoFlip) Start(m func(SwitchEvent)) bool {
+	for _, f := range g.Observers {
+		f.Init()
+	}
+
 	go g.LampSubscriber() //-temp
 	go g.SolenoidSubscriber()
 
@@ -73,6 +91,11 @@ func (g *GoFlip) Start(m func(SwitchEvent)) bool {
 			for _, sw := range buf {
 				g.switchStates[sw.SwitchID] = sw.Pressed
 				m(sw)
+
+				//call individual feature Switch Handling too.
+				for _, f := range g.Observers {
+					f.SwitchHandler(sw)
+				}
 			}
 		}
 
@@ -81,136 +104,11 @@ func (g *GoFlip) Start(m func(SwitchEvent)) bool {
 	return true
 }
 
-func (g *GoFlip) LampSubscriber() {
-	log.Infoln("Starting LDU subscribing")
-	for {
-
-		msg := <-g.LampControl
-		//	log.Infoln("received message")
-
-		//select {
-		//case msg := <-_lmpControl:
-		//format the message and send to the LDU
-		//{[lampID][ControlID]} where ControlID is 0 = 0 off,1 = on,2 = slow,3 = fast
-		switch msg.value {
-		case on:
-			g.devices.ldu.SendMessage(msg)
-		case off:
-			g.devices.ldu.SendMessage(msg)
-		case slowBlink:
-			g.devices.ldu.SendMessage(msg)
-		case fastBlink:
-			g.devices.ldu.SendMessage(msg)
-
-		default:
-			log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
-		}
-
-		//	}
-	}
+//IsGameInPlay returns true if a game is going on. False if not.
+func (g *GoFlip) IsGameInPlay() bool {
+	return g.BallInPlay > 0
 }
 
-func (g *GoFlip) SolenoidSubscriber() {
-	log.Infoln("Starting Solenoid subscribing")
-
-	for {
-
-		msg := <-g.SolenoidControl
-		log.Infoln("received message")
-		//select {
-		//case msg := <-g.SolenoidControl:
-		//format the message and send to the LDU
-		//{[lampID][ControlID]} where ControlID is 0 = 0 off,1 = on,2 = slow,3 = fast
-		switch msg.value {
-		case on:
-			g.devices.sdu.SendShortMessage(msg)
-		case off:
-			g.devices.sdu.SendShortMessage(msg)
-			break
-		default:
-			if msg.value >= 255 {
-				log.Errorf("Invalid message value received for Solenoid Control: %d", msg.value)
-			} else {
-				g.devices.sdu.SendShortMessage(msg)
-			}
-
-		}
-
-		//}
-	}
-}
-
-func (g *GoFlip) LampOn(lampID int) {
-	var msg deviceMessage
-	msg.id = lampID
-	msg.value = on
-
-	g.LampControl <- msg
-}
-
-func (g *GoFlip) LampOff(lampID int) {
-	var msg deviceMessage
-	msg.id = lampID
-	msg.value = off
-
-	g.LampControl <- msg
-}
-
-func (g *GoFlip) LampSlowBlink(lampID int) {
-	var msg deviceMessage
-	msg.id = lampID
-	msg.value = slowBlink
-
-	g.LampControl <- msg
-}
-
-func (g *GoFlip) LampFlastBlink(lampID int) {
-
-	var msg deviceMessage
-	msg.id = lampID
-	msg.value = fastBlink
-
-	g.LampControl <- msg
-}
-
-func (g *GoFlip) SolenoidOff(solID int) {
-	var msg deviceMessage
-	msg.id = solID
-	msg.value = off
-
-	g.SolenoidControl <- msg
-}
-func (g *GoFlip) SolenoidFire(solID int) {
-	var msg deviceMessage
-	msg.id = solID
-	msg.value = 2 //should be about a 100ms pule when at 2
-
-	g.SolenoidControl <- msg
-}
-
-func (g *GoFlip) SolenoidAlwaysOn(solID int) {
-	var msg deviceMessage
-	msg.id = solID
-	msg.value = 0x07
-
-	g.SolenoidControl <- msg
-}
-
-func (g *GoFlip) FlipperControl(on bool) {
-	var msg deviceMessage
-	msg.id = 0x0f
-	if on {
-		msg.value = 0x03
-	} else {
-		msg.value = 0x02
-	}
-	g.SolenoidControl <- msg
-}
-
-func (g *GoFlip) SolenoidOnDuration(solID int, duration int) {
-	var msg deviceMessage
-	msg.id = solID
-	msg.value = duration
-
-	g.SolenoidControl <- msg
+func (g *GoFlip) AddScore(points int) {
+	g.Scores[g.CurrentPlayer] += points
 }
