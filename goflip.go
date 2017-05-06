@@ -18,11 +18,13 @@ type GoFlip struct {
 	lampStates      map[int]int
 	Observers       []Observer
 	CurrentPlayer   int
+	ObserverEvents  chan SwitchEvent
 }
 
 type Observer interface {
 	Init()                     //Called from the beginning when the game is first turned on
 	GameStart()                //Called when a game starts
+	PlayerAdded(playerID int)  //Called when a player is added to the current game
 	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
 	PlayerEnd(int)             //called when a player ends. Same as BallDrained, unless there is a ball save
 	SwitchHandler(SwitchEvent) //called every time a switch event occurs
@@ -63,6 +65,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	g.LampControl = make(chan deviceMessage, 100)
 	g.SolenoidControl = make(chan deviceMessage, 100)
 	g.SwitchEvents = make(chan SwitchEvent, 100)
+	g.ObserverEvents = make(chan SwitchEvent, 100)
 
 	//These can be overriddden after Init, before Start is called
 	g.MaxPlayers = 2
@@ -92,16 +95,30 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 				g.switchStates[sw.SwitchID] = sw.Pressed
 				m(sw)
 
+				g.ObserverEvents <- sw
+			}
+		}
+
+	}()
+
+	//This broadcasts anything to all Observers.
+	go func() {
+		for {
+			select {
+			case sw := <-g.ObserverEvents:
 				//call individual feature Switch Handling too.
 				for _, f := range g.Observers {
 					f.SwitchHandler(sw)
 				}
 			}
 		}
-
 	}()
 
 	return true
+}
+
+func (g *GoFlip) BroadcastEvent(sw SwitchEvent) {
+	g.ObserverEvents <- sw
 }
 
 //IsGameInPlay returns true if a game is going on. False if not.
