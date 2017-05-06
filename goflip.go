@@ -25,8 +25,9 @@ type Observer interface {
 	Init()                     //Called from the beginning when the game is first turned on
 	GameStart()                //Called when a game starts
 	PlayerAdded(playerID int)  //Called when a player is added to the current game
+	PlayerStart(int)           //Called the very first time a player is playing (their first Ball1)
 	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
-	PlayerEnd(int)             //called when a player ends. Same as BallDrained, unless there is a ball save
+	PlayerEnd(int)             //called after the very last ball for the player is over (after ball 3 for example)
 	SwitchHandler(SwitchEvent) //called every time a switch event occurs
 	BallDrained()              //calls when a ball is drained
 	GameOver()                 //called when a game is over

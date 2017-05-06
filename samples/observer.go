@@ -66,8 +66,14 @@ func (p *sampleObserver) PlayerUp(playerID int) {
 
 }
 
-/*PlayerEnd is called after BallDrained. In a multiball game, this would be after the last
-BallDrained method call*/
+/*PlayerStart is called the very first time a player is playing (their first Ball1)
+ */
+func (p *sampleObserver) PlayerStart(playerID int) {
+
+}
+
+/*PlayerEnd is called after the very last ball for the player is over
+(after ball 3 for example)*/
 func (p *sampleObserver) PlayerEnd(playerID int) {
 
 }
