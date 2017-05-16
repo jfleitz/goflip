@@ -1,12 +1,14 @@
 package goflip
 
 import (
+	"encoding/json"
+
 	log "github.com/Sirupsen/logrus"
 )
 
 type GoFlip struct {
 	devices         arduinos
-	Scores          []int
+	Scores          []int32
 	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
@@ -56,12 +58,9 @@ type deviceMessage struct {
 //Init is Called just one time in the beginning to Initialize the game
 func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
-	if !consoleMode {
-		if !g.devices.Connect() {
-			log.Errorln("Devices were unable to connect. Check USB connections")
-			//return false make this configurable.
-		}
-	}
+	go StartServer()
+
+	log.AddHook(MsgHook{})
 
 	g.LampControl = make(chan deviceMessage, 100)
 	g.SolenoidControl = make(chan deviceMessage, 100)
@@ -76,6 +75,27 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	for _, f := range g.Observers {
 		f.Init()
+	}
+
+	//This broadcasts anything to all Observers.
+	go func() {
+		for {
+			select {
+			case sw := <-g.ObserverEvents:
+				//call individual feature Switch Handling too.
+				for _, f := range g.Observers {
+					f.SwitchHandler(sw)
+				}
+			}
+		}
+	}()
+
+	if !consoleMode {
+		if !g.devices.Connect() {
+			log.Errorln("Devices were unable to connect. Check USB connections")
+			//return false make this configurable.
+			return true
+		}
 	}
 
 	go g.LampSubscriber() //-temp
@@ -102,19 +122,6 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	}()
 
-	//This broadcasts anything to all Observers.
-	go func() {
-		for {
-			select {
-			case sw := <-g.ObserverEvents:
-				//call individual feature Switch Handling too.
-				for _, f := range g.Observers {
-					f.SwitchHandler(sw)
-				}
-			}
-		}
-	}()
-
 	return true
 }
 
@@ -128,5 +135,33 @@ func (g *GoFlip) IsGameInPlay() bool {
 }
 
 func (g *GoFlip) AddScore(points int) {
-	g.Scores[g.CurrentPlayer] += points
+	g.Scores[g.CurrentPlayer] += int32(points)
+}
+
+func (g *GoFlip) SendStats() {
+	stat := GameStats{}
+	stat.BallInPlay = g.BallInPlay
+	stat.Credits = 0
+	stat.Display1 = 0
+	stat.Display2 = 0
+	stat.Display3 = 0
+	stat.Display4 = 0
+	stat.Match = 0
+	stat.TotalBalls = g.TotalBalls
+	i := len(g.Scores)
+	if i > 0 {
+		stat.Player1Score = g.Scores[0]
+		stat.Player2Score = g.Scores[1]
+		stat.Player3Score = g.Scores[2]
+		stat.Player4Score = g.Scores[3]
+	}
+	statb, err := json.Marshal(stat)
+
+	if err != nil {
+		log.Errorln("Error in marshalling:", err)
+		return
+	}
+	//log.Infoln("Sending json:", string(statb))
+	Broadcast("stat", string(statb))
+
 }

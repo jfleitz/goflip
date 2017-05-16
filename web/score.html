@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" >
+    <head>
+        <base href="/">
+        <meta charset="utf-8">
+        <title>Mike Bossy</title>
+        <meta name="description" content="Current Scores and what is going on with the Mike Bossy pinball machine">
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular.min.js"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular-route.js"></script>
+        <script type="text/javascript" src="/socket/gotalk.js"></script>
+        <script type="text/javascript" src="/score.js"></script>
+    </head>
+    <body ng-app="myApp" ng-controller="scoreCtrl">
+        <button ng-click="connectWS()">Connect</button>
+        <h5>Connection Status: {{connectionStatus}}</h5>
+
+        Player1Score = {{Player1Score}}<br>
+        Player2Score = {{Player2Score}}<br>
+        Player3Score = {{Player3Score}}<br>
+        Player4Score = {{Player4Score}}<br>
+        Match        = {{Match}}<br>
+        TotalBalls   = {{TotalBalls}}<br>
+        BallInPlay   = {{BallInPlay}}<br>
+        Display1     = {{Display1}}<br>
+        Display2     = {{Display2}}<br>
+        Display3     = {{Display3}}<br>
+        Display4     = {{Display4}}<br>
+        Credits      = {{Credits}}<br>
+
+         <button ng-click="clearEvents()">Clear</button>
+    </body>
+</HTML>
