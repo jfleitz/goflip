@@ -27,6 +27,11 @@
         Display4     = {{Display4}}<br>
         Credits      = {{Credits}}<br>
 
+<hr>
          <button ng-click="clearEvents()">Clear</button>
+         
+    <ul>
+        <li ng-repeat="msg in messages">{{msg.Time}}: {{msg.Message}}</li>
+    </ul>
     </body>
 </HTML>
