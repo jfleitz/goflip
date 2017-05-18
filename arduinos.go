@@ -190,7 +190,7 @@ func (a *arduino) SendMessage(d deviceMessage) error {
 	tosend[1] = byte(d.id + 48)
 	tosend[2] = byte(d.value + 48)
 	tosend[3] = byte('}')
-	log.Infof("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
+	//	log.Infof("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(tosend)
 	return err
 }
@@ -201,7 +201,7 @@ func (a *arduino) SendShortMessage(d deviceMessage) error {
 	b[0] = (byte)(d.id << 3)
 	b[0] = b[0] | (byte)(0x07&d.value)
 
-	log.Infof("Sending short message for %d:%d to %s", d.id, d.value, a.port)
+	//	log.Infof("Sending short message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(b)
 
 	return err

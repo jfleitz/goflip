@@ -8,7 +8,7 @@ import (
 
 type GoFlip struct {
 	devices         arduinos
-	Scores          []int32
+	Scores          [4]int32
 	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
@@ -135,7 +135,10 @@ func (g *GoFlip) IsGameInPlay() bool {
 }
 
 func (g *GoFlip) AddScore(points int) {
-	g.Scores[g.CurrentPlayer] += int32(points)
+	if g.CurrentPlayer < 1 {
+		return
+	}
+	g.Scores[g.CurrentPlayer-1] += int32(points)
 }
 
 func (g *GoFlip) SendStats() {
@@ -149,6 +152,7 @@ func (g *GoFlip) SendStats() {
 	stat.Match = 0
 	stat.TotalBalls = g.TotalBalls
 	i := len(g.Scores)
+
 	if i > 0 {
 		stat.Player1Score = g.Scores[0]
 		stat.Player2Score = g.Scores[1]
