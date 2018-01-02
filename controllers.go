@@ -37,7 +37,7 @@ func (g *GoFlip) SolenoidSubscriber() {
 	for {
 
 		msg := <-g.SolenoidControl
-		log.Infoln("received message")
+		log.Infoln("rec sol message")
 		//select {
 		//case msg := <-g.SolenoidControl:
 		//format the message and send to the LDU

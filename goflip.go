@@ -1,5 +1,6 @@
 package goflip
 
+//to build: env GOOS=linux GOARCH=arm GOARM=5 go build
 import (
 	"encoding/json"
 
@@ -12,15 +13,21 @@ type GoFlip struct {
 	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
-	MaxPlayers      int
+	MaxPlayers      int //max players supported by the game
+	NumOfPlayers    int //number of players playing
 	LampControl     chan deviceMessage
 	SolenoidControl chan deviceMessage
 	SwitchEvents    chan SwitchEvent
+	DisplayControl  chan displayMessage
+	SoundControl    chan soundMessage
+	PWMControl      chan pwmMessage
 	switchStates    []bool
 	lampStates      map[int]int
 	Observers       []Observer
 	CurrentPlayer   int
 	ObserverEvents  chan SwitchEvent
+	GameRunning     bool  //Whether a game is going on = true, or game is over = false
+	BallScore       int32 //current score for the ball in play
 }
 
 type Observer interface {
@@ -29,7 +36,8 @@ type Observer interface {
 	PlayerAdded(playerID int)  //Called when a player is added to the current game
 	PlayerStart(int)           //Called the very first time a player is playing (their first Ball1)
 	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
-	PlayerEnd(int)             //called after the very last ball for the player is over (after ball 3 for example)
+	PlayerEnd(int)             //called after ever ball is ended for the player (after ball drain)
+	PlayerFinish(int)          //called after the very last ball for the player is over (after ball 3 for example)
 	SwitchHandler(SwitchEvent) //called every time a switch event occurs
 	BallDrained()              //calls when a ball is drained
 	GameOver()                 //called when a game is over
@@ -62,16 +70,27 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	log.AddHook(MsgHook{})
 
-	g.LampControl = make(chan deviceMessage, 100)
-	g.SolenoidControl = make(chan deviceMessage, 100)
+	g.LampControl = make(chan deviceMessage)
+	g.SolenoidControl = make(chan deviceMessage)
 	g.SwitchEvents = make(chan SwitchEvent, 100)
 	g.ObserverEvents = make(chan SwitchEvent, 100)
+
+	g.DisplayControl = make(chan displayMessage)
+	g.SoundControl = make(chan soundMessage)
+	g.PWMControl = make(chan pwmMessage)
 
 	//These can be overriddden after Init, before Start is called
 	g.MaxPlayers = 2
 	g.TotalBalls = 3
+	g.BallScore = 0
 	g.switchStates = make([]bool, 64)
 	g.lampStates = make(map[int]int)
+
+	g.gpioInit()
+
+	go g.LampSubscriber()
+	go g.SolenoidSubscriber()
+	go g.gpioSubscriber()
 
 	for _, f := range g.Observers {
 		f.Init()
@@ -98,9 +117,6 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 		}
 	}
 
-	go g.LampSubscriber() //-temp
-	go g.SolenoidSubscriber()
-
 	//handler for calling switch event routine:
 
 	go func() {
@@ -114,7 +130,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 			for _, sw := range buf {
 				g.switchStates[sw.SwitchID] = sw.Pressed
-				m(sw)
+				m(sw) //main switch eventHandler called
 
 				g.ObserverEvents <- sw
 			}
@@ -139,6 +155,15 @@ func (g *GoFlip) AddScore(points int) {
 		return
 	}
 	g.Scores[g.CurrentPlayer-1] += int32(points)
+	g.BallScore += int32(points)
+	log.Infof("goFlip:BallScore = %d\n", g.BallScore)
+
+	//refresh display
+	g.SetDisplay(g.CurrentPlayer, g.PlayerScore(g.CurrentPlayer))
+}
+
+func (g *GoFlip) PlayerScore(playerNumber int) int32 {
+	return g.Scores[playerNumber-1]
 }
 
 func (g *GoFlip) SendStats() {
