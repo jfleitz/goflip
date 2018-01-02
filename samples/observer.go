@@ -72,9 +72,13 @@ func (p *sampleObserver) PlayerStart(playerID int) {
 
 }
 
-/*PlayerEnd is called after the very last ball for the player is over
-(after ball 3 for example)*/
+/*PlayerEnd is called after every ball for the player is over*/
 func (p *sampleObserver) PlayerEnd(playerID int) {
+
+}
+
+/*PlayerEnd is called after the very last ball for the player is over (after ball 3 for example*/
+func (p *sampleObserver) PlayerFinish(playerID int) {
 
 }
 

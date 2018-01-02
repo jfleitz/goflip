@@ -104,7 +104,7 @@ func StartServer() {
 		if err != nil {
 			log.Fatal(err)
 		}*/
-	folder := `/home/drjones/source/go/src/github.com/jfleitz/goflip/web` //fmt.Sprint(dir, `/web`)
+	folder := `/goflip/web` //fmt.Sprint(dir, `/web`)
 	//log.Infoln("web folder is:", folder)
 	http.Handle("/socket/", ws)
 
