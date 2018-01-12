@@ -75,7 +75,12 @@ func (g *GoFlip) gpioSubscriber() {
 				}
 			}
 		case sndMsg := <-g.SoundControl:
-			_sound = sndMsg.soundID
+			go func() {
+				_sound = sndMsg.soundID
+				time.Sleep(time.Millisecond * 100)
+				_sound = noSound
+			}() //doing this so that we can retrigger another sound of the same right after
+
 		case pwmMessage := <-g.PWMControl:
 			log.Infof("PWM request for %d:%d", pwmMessage.portID, pwmMessage.value)
 		case <-time.After(time.Millisecond * 100):
@@ -306,4 +311,5 @@ func (g *GoFlip) PlaySound(soundID byte) {
 	msg.soundID = soundID
 
 	g.SoundControl <- msg
+
 }
