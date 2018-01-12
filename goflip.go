@@ -28,6 +28,8 @@ type GoFlip struct {
 	ObserverEvents  chan SwitchEvent
 	GameRunning     bool  //Whether a game is going on = true, or game is over = false
 	BallScore       int32 //current score for the ball in play
+	TestMode        bool  //states whether we are in Test Mode or not
+	DiagObserver    Observer
 }
 
 type Observer interface {
@@ -80,9 +82,10 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	g.PWMControl = make(chan pwmMessage)
 
 	//These can be overriddden after Init, before Start is called
-	g.MaxPlayers = 2
+	g.MaxPlayers = 4
 	g.TotalBalls = 3
 	g.BallScore = 0
+	g.TestMode = false
 	g.switchStates = make([]bool, 64)
 	g.lampStates = make(map[int]int)
 
@@ -101,10 +104,15 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 		for {
 			select {
 			case sw := <-g.ObserverEvents:
-				//call individual feature Switch Handling too.
-				for _, f := range g.Observers {
-					f.SwitchHandler(sw)
+				g.DiagObserver.SwitchHandler(sw)
+
+				if !g.TestMode {
+					//call individual feature Switch Handling too.
+					for _, f := range g.Observers {
+						f.SwitchHandler(sw)
+					}
 				}
+
 			}
 		}
 	}()
@@ -160,6 +168,13 @@ func (g *GoFlip) AddScore(points int) {
 
 	//refresh display
 	g.SetDisplay(g.CurrentPlayer, g.PlayerScore(g.CurrentPlayer))
+}
+
+func (g *GoFlip) ClearScores() {
+	for i, _ := range g.Scores {
+		g.Scores[i] = 0
+		g.ShowDisplay(i+1, false)
+	}
 }
 
 func (g *GoFlip) PlayerScore(playerNumber int) int32 {

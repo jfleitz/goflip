@@ -21,12 +21,17 @@ BallInPlay = called when a ball is launched
 //GameStart is called when a game is started (when the first player gets a credit)
 func (g *GoFlip) GameStart() {
 	log.Infoln("gameEvents:GameStart()")
+
+	if g.TestMode {
+		return
+	}
+
 	//Reset game stats
 	g.BallInPlay = 0 //nextup will queue this up
 	g.NumOfPlayers = 0
 	g.CurrentPlayer = 0
-
 	g.GameRunning = true
+	g.ClearScores()
 
 	for _, f := range g.Observers {
 		f.GameStart()
@@ -37,6 +42,10 @@ func (g *GoFlip) GameStart() {
 //GameOver should be called when it is game over.
 func (g *GoFlip) GameOver() {
 	log.Infoln("gameEvents:GameOver()")
+
+	if g.TestMode {
+		return
+	}
 
 	g.BallInPlay = 0
 
@@ -50,6 +59,10 @@ func (g *GoFlip) GameOver() {
 func (g *GoFlip) BallDrained() {
 	log.Infoln("BallDrained() called")
 
+	if g.TestMode {
+		return
+	}
+
 	for _, f := range g.Observers {
 		f.BallDrained()
 	}
@@ -58,6 +71,10 @@ func (g *GoFlip) BallDrained() {
 func (g *GoFlip) PlayerFinish() {
 	log.Infoln("PlayerFinish() called")
 
+	if g.TestMode {
+		return
+	}
+
 	for _, f := range g.Observers {
 		f.PlayerFinish(g.CurrentPlayer)
 	}
@@ -65,6 +82,10 @@ func (g *GoFlip) PlayerFinish() {
 
 func (g *GoFlip) PlayerEnd() {
 	log.Infoln("PlayerEnd() called")
+
+	if g.TestMode {
+		return
+	}
 
 	for _, f := range g.Observers {
 		f.PlayerEnd(g.CurrentPlayer)
@@ -75,15 +96,23 @@ func (g *GoFlip) PlayerEnd() {
 
 func (g *GoFlip) PlayerUp() {
 	log.Infoln("PlayerUp() called")
+
+	if g.TestMode {
+		return
+	}
+
 	g.BallScore = 0 //reset before any points are added
 
 	defer func() {
 		if g.GameRunning {
+			//	g.BlinkOnlyOneDisplay(g.CurrentPlayer - 1)
 			for _, f := range g.Observers {
 				f.PlayerUp(g.CurrentPlayer)
 			}
 			log.Infoln("GoFlip: PlayerUp. IsGameInPlay. BallInPlay, CurrentPlayer:", g.BallInPlay, g.CurrentPlayer)
 		} else {
+			//	g.BlinkOnlyOneDisplay(4) //credit display
+			//	g.BlinkDisplay(4, false)
 			log.Infoln("GoFlip: PlayerUp. IsGameInPlay = false")
 		}
 
@@ -122,6 +151,11 @@ func (g *GoFlip) PlayerUp() {
 
 func (g *GoFlip) AddPlayer() {
 	log.Infoln("AddPlayer() called")
+
+	if g.TestMode {
+		return
+	}
+
 	//sanity check, only can add a player if on ball 1
 	if g.BallInPlay > 1 {
 		return
@@ -131,4 +165,9 @@ func (g *GoFlip) AddPlayer() {
 		g.NumOfPlayers++
 		g.ShowDisplay(g.NumOfPlayers, true)
 	}
+
+	for _, f := range g.Observers {
+		f.PlayerAdded(g.NumOfPlayers)
+	}
+
 }
