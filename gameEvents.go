@@ -1,6 +1,10 @@
 package goflip
 
-import log "github.com/Sirupsen/logrus"
+import (
+	"time"
+
+	log "github.com/Sirupsen/logrus"
+)
 
 /*
 gameEvents has handlers for the game in play.
@@ -91,7 +95,8 @@ func (g *GoFlip) PlayerEnd() {
 		f.PlayerEnd(g.CurrentPlayer)
 	}
 
-	g.PlayerUp() //call for the next ball or player if there is one
+	time.Sleep(1 * time.Second) //give a slight pause before ejecting the ball
+	g.PlayerUp()                //call for the next ball or player if there is one
 }
 
 func (g *GoFlip) PlayerUp() {
@@ -133,8 +138,13 @@ func (g *GoFlip) PlayerUp() {
 			g.CurrentPlayer = 1
 		} else {
 			//game over
-			g.SetBallInPlayDisp(0)
+			log.Infoln("GameOver is going to be called")
+			g.DebugOutDisplays()
+			g.SetBallInPlayDisp(blankScore)
+			g.DebugOutDisplays()
 			g.GameOver()
+			g.DebugOutDisplays()
+			log.Infoln("GameOver was called")
 			return
 		}
 	}
@@ -163,11 +173,12 @@ func (g *GoFlip) AddPlayer() {
 
 	if g.NumOfPlayers < g.MaxPlayers {
 		g.NumOfPlayers++
+
 		g.ShowDisplay(g.NumOfPlayers, true)
-	}
+		log.Infof("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
 
-	for _, f := range g.Observers {
-		f.PlayerAdded(g.NumOfPlayers)
+		for _, f := range g.Observers {
+			f.PlayerAdded(g.NumOfPlayers)
+		}
 	}
-
 }
