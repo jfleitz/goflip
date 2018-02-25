@@ -91,6 +91,19 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	g.gpioInit()
 
+	//moved this before subbscribers try to connect and write
+	if !consoleMode {
+		if !g.devices.Connect() {
+			log.Warningln("RETRY:Devices were unable to connect")
+			//go ahead and retry once
+			if !g.devices.Connect() {
+				log.Errorln("Devices were unable to connect. Check USB connections")
+				//return false make this configurable.
+				return true
+			}
+		}
+	}
+
 	go g.LampSubscriber()
 	go g.SolenoidSubscriber()
 	go g.gpioSubscriber()
@@ -116,14 +129,6 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 			}
 		}
 	}()
-
-	if !consoleMode {
-		if !g.devices.Connect() {
-			log.Errorln("Devices were unable to connect. Check USB connections")
-			//return false make this configurable.
-			return true
-		}
-	}
 
 	//handler for calling switch event routine:
 
