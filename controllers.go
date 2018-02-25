@@ -1,12 +1,17 @@
 package goflip
 
-import log "github.com/Sirupsen/logrus"
+import (
+	log "github.com/Sirupsen/logrus"
+)
 
 func (g *GoFlip) LampSubscriber() {
 	log.Infoln("Starting LDU subscribing")
 	for {
 
 		msg := <-g.LampControl
+		msg.value += 1 //hate to do this, but have to so that the constants are compatible for now. Fix later
+
+		log.Debugf("Lamp Msg id:%d value:%d\n", msg.id, msg.value)
 		//	log.Infoln("received message")
 
 		//select {
@@ -22,12 +27,20 @@ func (g *GoFlip) LampSubscriber() {
 			g.devices.ldu.SendMessage(msg)
 		case FastBlink:
 			g.devices.ldu.SendMessage(msg)
-
 		default:
 			log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
 		}
 
 		//	}
+
+		/*
+			To change:
+			0 0 xx xxxx = off
+			0 1 xx xxxx = on
+			1 0 xx xxxx = slow blink
+			1 1 xx xxxx = fast blink
+		*/
+
 	}
 }
 
@@ -37,22 +50,23 @@ func (g *GoFlip) SolenoidSubscriber() {
 	for {
 
 		msg := <-g.SolenoidControl
-		log.Infoln("rec sol message")
+
+		log.Debugf("Solenoid Msg id:%d value:%d\n", msg.id, msg.value)
 		//select {
 		//case msg := <-g.SolenoidControl:
 		//format the message and send to the LDU
 		//{[lampID][ControlID]} where ControlID is 0 = 0 off,1 = on,2 = slow,3 = fast
 		switch msg.value {
 		case On:
-			g.devices.sdu.SendShortMessage(msg)
+			g.devices.sdu.SendShortMessage(msg, 3)
 		case Off:
-			g.devices.sdu.SendShortMessage(msg)
+			g.devices.sdu.SendShortMessage(msg, 3)
 			break
 		default:
 			if msg.value >= 255 {
 				log.Errorf("Invalid message value received for Solenoid Control: %d", msg.value)
 			} else {
-				g.devices.sdu.SendShortMessage(msg)
+				g.devices.sdu.SendShortMessage(msg, 3)
 			}
 
 		}

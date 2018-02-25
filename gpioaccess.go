@@ -293,6 +293,7 @@ func (g *GoFlip) SetDisplay(display int, value int32) {
 func (g *GoFlip) ShowDisplay(display int, on bool) {
 	if on {
 		g.SetDisplay(display, 0)
+		log.Infof("ShowDisplay called setting disp on for %d\n", display)
 	} else {
 		g.SetDisplay(display, blankScore)
 	}
@@ -312,4 +313,11 @@ func (g *GoFlip) PlaySound(soundID byte) {
 
 	g.SoundControl <- msg
 
+}
+
+func (g *GoFlip) DebugOutDisplays() {
+	for i, val := range _disp {
+		log.Debugf("Display Array %d: ", i)
+		log.Debugln(val)
+	}
 }
