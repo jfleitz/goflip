@@ -61,7 +61,7 @@ func (a *arduinos) Connect() bool {
 	//for each port, we need to open a connection then see what it is, and if it fits the bill, save a ref for it
 	for _, port := range a.ports {
 		mode := &serial.Mode{
-			BaudRate: 57600,
+			BaudRate: 38400,
 		}
 
 		s, err := serial.Open(port, mode)
@@ -183,23 +183,32 @@ func (ard *swarduino) ReadSwitch() []SwitchEvent {
 func (a *arduino) SendMessage(d deviceMessage) error {
 	//value received is zero based. We need to convert to "arduino based" by adding 48 first
 
-	tosend := make([]byte, 4)
+	tosend := make([]byte, 3)
+	tosend[0] = byte(0)
+	tosend[1] = (byte)(d.id)
+	tosend[2] = (byte)(d.value)
 
-	//toSend := fmt.Sprintf("{%d%d}", d.id, d.value+48)
-	tosend[0] = byte('{')
-	tosend[1] = byte(d.id + 48)
-	tosend[2] = byte(d.value + 48)
-	tosend[3] = byte('}')
 	//	log.Infof("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(tosend)
 	return err
 }
 
 //Short Message format is 1 byte long. Top 5 bits is the ID, bottom 3 bits are the value
-func (a *arduino) SendShortMessage(d deviceMessage) error {
+func (a *arduino) SendShortMessage(d deviceMessage, cmdSize int) error {
 	b := make([]byte, 1)
-	b[0] = (byte)(d.id << 3)
-	b[0] = b[0] | (byte)(0x07&d.value)
+
+	switch cmdSize {
+	case 2:
+		b[0] = (byte)(d.id << 2)
+		b[0] = b[0] | (byte)(0x03&d.value)
+	case 3:
+		b[0] = (byte)(d.id << 3)
+		b[0] = b[0] | (byte)(0x07&d.value)
+	default:
+		b[0] = (byte)(d.id << 3)
+		b[0] = b[0] | (byte)(0x07&d.value)
+
+	}
 
 	//	log.Infof("Sending short message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(b)
