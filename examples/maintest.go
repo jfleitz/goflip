@@ -8,7 +8,7 @@ import (
 
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"go.bug.st/serial.v1"
 )
 

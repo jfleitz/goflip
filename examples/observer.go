@@ -25,7 +25,7 @@ func main() {
 package sample //this will probably be package main in your app
 
 import (
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/jfleitz/goflip"
 )
 
