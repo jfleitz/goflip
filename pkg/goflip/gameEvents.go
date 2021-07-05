@@ -1,6 +1,7 @@
 package goflip
 
 import (
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -91,12 +92,18 @@ func (g *GoFlip) PlayerEnd() {
 		return
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(len(g.Observers))
+
 	for _, f := range g.Observers {
-		f.PlayerEnd(g.CurrentPlayer)
+		f.PlayerEnd(g.CurrentPlayer, &wait)
 	}
 
-	time.Sleep(1 * time.Second) //give a slight pause before ejecting the ball
-	g.PlayerUp()                //call for the next ball or player if there is one
+	go func() {
+		wait.Wait()                 //need to wait for all observers to be done with any goroutines.
+		time.Sleep(1 * time.Second) //give a slight pause before ejecting the ball
+		g.PlayerUp()                //call for the next ball or player if there is one
+	}()
 }
 
 func (g *GoFlip) PlayerUp() {

@@ -3,46 +3,48 @@ package goflip
 //to build: env GOOS=linux GOARCH=arm GOARM=5 go build
 import (
 	"encoding/json"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type GoFlip struct {
-	devices         arduinos
-	Scores          [4]int32
-	BallInPlay      int //If no ball, then 0.
-	ExtraBall       bool
-	TotalBalls      int
-	MaxPlayers      int //max players supported by the game
-	NumOfPlayers    int //number of players playing
-	LampControl     chan deviceMessage
-	SolenoidControl chan deviceMessage
-	SwitchEvents    chan SwitchEvent
-	DisplayControl  chan displayMessage
-	SoundControl    chan soundMessage
-	PWMControl      chan pwmMessage
-	switchStates    []bool
-	lampStates      map[int]int
-	Observers       []Observer
-	CurrentPlayer   int
-	ObserverEvents  chan SwitchEvent
-	GameRunning     bool  //Whether a game is going on = true, or game is over = false
-	BallScore       int32 //current score for the ball in play
-	TestMode        bool  //states whether we are in Test Mode or not
-	DiagObserver    Observer
+	devices          arduinos
+	Scores           [4]int32
+	BallInPlay       int //If no ball, then 0.
+	ExtraBall        bool
+	TotalBalls       int
+	MaxPlayers       int //max players supported by the game
+	NumOfPlayers     int //number of players playing
+	LampControl      chan deviceMessage
+	SolenoidControl  chan deviceMessage
+	SwitchEvents     chan SwitchEvent
+	DisplayControl   chan displayMessage
+	SoundControl     chan soundMessage
+	PWMControl       chan pwmMessage
+	switchStates     []bool
+	lampStates       map[int]int
+	Observers        []Observer
+	CurrentPlayer    int
+	ObserverEvents   chan SwitchEvent
+	GameRunning      bool  //Whether a game is going on = true, or game is over = false
+	BallScore        int32 //current score for the ball in play
+	TestMode         bool  //states whether we are in Test Mode or not
+	DiagObserver     Observer
+	PlayerEndChannel chan bool
 }
 
 type Observer interface {
-	Init()                     //Called from the beginning when the game is first turned on
-	GameStart()                //Called when a game starts
-	PlayerAdded(playerID int)  //Called when a player is added to the current game
-	PlayerStart(int)           //Called the very first time a player is playing (their first Ball1)
-	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
-	PlayerEnd(int)             //called after ever ball is ended for the player (after ball drain)
-	PlayerFinish(int)          //called after the very last ball for the player is over (after ball 3 for example)
-	SwitchHandler(SwitchEvent) //called every time a switch event occurs
-	BallDrained()              //calls when a ball is drained
-	GameOver()                 //called when a game is over
+	Init()                          //Called from the beginning when the game is first turned on
+	GameStart()                     //Called when a game starts
+	PlayerAdded(playerID int)       //Called when a player is added to the current game
+	PlayerStart(int)                //Called the very first time a player is playing (their first Ball1)
+	PlayerUp(int)                   //called when a new player is up (passing the player number in as well.. zero based)
+	PlayerEnd(int, *sync.WaitGroup) //called after every ball is ended for the player (after ball drain)
+	PlayerFinish(int)               //called after the very last ball for the player is over (after ball 3 for example)
+	SwitchHandler(SwitchEvent)      //called every time a switch event occurs
+	BallDrained()                   //calls when a ball is drained
+	GameOver()                      //called when a game is over
 }
 
 type SwitchEvent struct {
@@ -71,6 +73,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	go StartServer()
 
 	log.AddHook(MsgHook{})
+	g.PlayerEndChannel = make(chan bool)
 
 	g.LampControl = make(chan deviceMessage)
 	g.SolenoidControl = make(chan deviceMessage)
