@@ -1,5 +1,8 @@
 package goflip
 
+//JAF TODO... need to send a keepalive to each arduino
+//https://github.com/google/periph/blob/v3.6.8/experimental/devices/pca9685/example_test.go
+
 import (
 	log "github.com/sirupsen/logrus"
 )
@@ -9,27 +12,37 @@ func (g *GoFlip) LampSubscriber() {
 	for {
 
 		msg := <-g.LampControl
-		msg.value += 1 //hate to do this, but have to so that the constants are compatible for now. Fix later
 
-		log.Debugf("Lamp Msg id:%d value:%d\n", msg.id, msg.value)
+		//This is temp::::
+		if msg.value > FastBlink {
+			log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
+			return
+		}
+		msg.value += 1 //hate to do this, but have to so that the constants btw arduino and goflip are compatible for now. Fix later
+
+		//		log.Debugf("Lamp Msg id:%d value:%d\n", msg.id, msg.value)
+
 		//	log.Infoln("received message")
 
 		//select {
 		//case msg := <-_lmpControl:
 		//format the message and send to the LDU
 		//{[lampID][ControlID]} where ControlID is 0 = 0 off,1 = on,2 = slow,3 = fast
-		switch msg.value {
-		case On:
-			g.devices.ldu.SendMessage(msg)
-		case Off:
-			g.devices.ldu.SendMessage(msg)
-		case SlowBlink:
-			g.devices.ldu.SendMessage(msg)
-		case FastBlink:
-			g.devices.ldu.SendMessage(msg)
-		default:
-			log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
-		}
+
+		g.devices.ldu.SendMessage(msg)
+		//JAF TODO: put this back in
+		/*		switch msg.value {
+				case On:
+					g.devices.ldu.SendMessage(msg)
+				case Off:
+					g.devices.ldu.SendMessage(msg)
+				case SlowBlink:
+					g.devices.ldu.SendMessage(msg)
+				case FastBlink:
+					g.devices.ldu.SendMessage(msg)
+				default:
+					log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
+				}*/
 
 		//	}
 
@@ -61,7 +74,6 @@ func (g *GoFlip) SolenoidSubscriber() {
 			g.devices.sdu.SendShortMessage(msg, 3)
 		case Off:
 			g.devices.sdu.SendShortMessage(msg, 3)
-			break
 		default:
 			if msg.value >= 255 {
 				log.Errorf("Invalid message value received for Solenoid Control: %d", msg.value)
@@ -108,7 +120,7 @@ func (g *GoFlip) LampSlowBlink(lampID ...int) {
 	}
 }
 
-func (g *GoFlip) LampFlastBlink(lampID ...int) {
+func (g *GoFlip) LampFastBlink(lampID ...int) {
 
 	for _, l := range lampID {
 		g.SetLampState(l, FastBlink)
