@@ -9,29 +9,31 @@ import (
 )
 
 type GoFlip struct {
-	devices          arduinos
-	Scores           [4]int32
-	BallInPlay       int //If no ball, then 0.
-	ExtraBall        bool
-	TotalBalls       int
-	MaxPlayers       int //max players supported by the game
-	NumOfPlayers     int //number of players playing
-	LampControl      chan deviceMessage
-	SolenoidControl  chan deviceMessage
-	SwitchEvents     chan SwitchEvent
-	DisplayControl   chan displayMessage
-	SoundControl     chan soundMessage
-	PWMControl       chan pwmMessage
-	switchStates     []bool
-	lampStates       map[int]int
-	Observers        []Observer
-	CurrentPlayer    int
-	ObserverEvents   chan SwitchEvent
-	GameRunning      bool  //Whether a game is going on = true, or game is over = false
+	devices         arduinos
+	Scores          [4]int32
+	BallInPlay      int //If no ball, then 0.
+	ExtraBall       bool
+	TotalBalls      int
+	MaxPlayers      int //max players supported by the game
+	NumOfPlayers    int //number of players playing
+	LampControl     chan deviceMessage
+	SolenoidControl chan deviceMessage
+	SwitchEvents    chan SwitchEvent
+	DisplayControl  chan displayMessage
+	SoundControl    chan soundMessage
+	PWMControl      chan pwmMessage
+	switchStates    []bool
+	lampStates      map[int]int
+	Observers       []Observer
+	CurrentPlayer   int
+	ObserverEvents  chan SwitchEvent
+	//GameRunning      bool  //Whether a game is going on = true, or game is over = false
 	BallScore        int32 //current score for the ball in play
 	TestMode         bool  //states whether we are in Test Mode or not
 	DiagObserver     Observer
 	PlayerEndChannel chan bool
+	gameState        GState
+	playerState      PState
 }
 
 type Observer interface {
@@ -60,7 +62,23 @@ const (
 	ack       = iota //when used, it doesn't matter what ID is.
 )
 
+type PState int
+
+const (
+	PlayerUp PState = iota
+	PlayerEnd
+	PlayerFinish
+)
+
 const consoleMode bool = false
+
+type GState int
+
+const (
+	Init GState = iota
+	GameStart
+	GameOver
+)
 
 type deviceMessage struct {
 	id    int
@@ -71,6 +89,7 @@ type deviceMessage struct {
 func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	go StartServer()
+	g.gameState = Init
 
 	log.AddHook(MsgHook{})
 	g.PlayerEndChannel = make(chan bool)
@@ -216,4 +235,49 @@ func (g *GoFlip) SendStats() {
 	//log.Infoln("Sending json:", string(statb))
 	Broadcast("stat", string(statb))
 
+}
+
+func (g *GoFlip) GetPlayerState() PState {
+	return g.playerState
+}
+
+func (g *GoFlip) ChangePlayerState(newState PState) bool {
+	if g.playerState == newState {
+		//already at this state, so don't change
+		return false
+	}
+
+	g.playerState = newState
+	switch g.playerState {
+	case PlayerUp:
+		g.PlayerUp()
+	case PlayerEnd:
+		g.PlayerEnd()
+	case PlayerFinish:
+		g.PlayerFinish()
+	}
+	return true
+
+}
+
+func (g *GoFlip) GetGameState() GState {
+	return g.gameState
+}
+
+func (g *GoFlip) ChangeGameState(newState GState) bool {
+	if g.gameState == newState {
+		//already in the current state
+		return false
+	}
+
+	g.gameState = newState
+
+	switch g.gameState {
+	case GameOver:
+		g.GameOver()
+	case GameStart:
+		g.GameStart()
+	}
+
+	return true
 }

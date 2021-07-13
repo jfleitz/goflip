@@ -2,7 +2,6 @@ package goflip
 
 import (
 	"sync"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -35,7 +34,6 @@ func (g *GoFlip) GameStart() {
 	g.BallInPlay = 0 //nextup will queue this up
 	g.NumOfPlayers = 0
 	g.CurrentPlayer = 0
-	g.GameRunning = true
 	g.ClearScores()
 
 	for _, f := range g.Observers {
@@ -46,6 +44,8 @@ func (g *GoFlip) GameStart() {
 
 //GameOver should be called when it is game over.
 func (g *GoFlip) GameOver() {
+	g.SetBallInPlayDisp(blankScore)
+
 	log.Infoln("gameEvents:GameOver()")
 
 	if g.TestMode {
@@ -58,7 +58,6 @@ func (g *GoFlip) GameOver() {
 		f.GameOver()
 	}
 
-	g.GameRunning = false
 }
 
 func (g *GoFlip) BallDrained() {
@@ -86,8 +85,6 @@ func (g *GoFlip) PlayerFinish() {
 }
 
 func (g *GoFlip) PlayerEnd() {
-	log.Infoln("PlayerEnd() called")
-
 	if g.TestMode {
 		return
 	}
@@ -100,9 +97,8 @@ func (g *GoFlip) PlayerEnd() {
 	}
 
 	go func() {
-		wait.Wait()                 //need to wait for all observers to be done with any goroutines.
-		time.Sleep(1 * time.Second) //give a slight pause before ejecting the ball
-		g.PlayerUp()                //call for the next ball or player if there is one
+		wait.Wait() //need to wait for all observers to be done with any goroutines.
+		g.ChangePlayerState(PlayerUp)
 	}()
 }
 
@@ -116,7 +112,7 @@ func (g *GoFlip) PlayerUp() {
 	g.BallScore = 0 //reset before any points are added
 
 	defer func() {
-		if g.GameRunning {
+		if g.gameState == GameStart {
 			//	g.BlinkOnlyOneDisplay(g.CurrentPlayer - 1)
 			for _, f := range g.Observers {
 				f.PlayerUp(g.CurrentPlayer)
@@ -145,13 +141,7 @@ func (g *GoFlip) PlayerUp() {
 			g.CurrentPlayer = 1
 		} else {
 			//game over
-			log.Infoln("GameOver is going to be called")
-			g.DebugOutDisplays()
-			g.SetBallInPlayDisp(blankScore)
-			g.DebugOutDisplays()
 			g.GameOver()
-			g.DebugOutDisplays()
-			log.Infoln("GameOver was called")
 			return
 		}
 	}

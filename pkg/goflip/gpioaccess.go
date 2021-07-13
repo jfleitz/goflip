@@ -94,7 +94,7 @@ func (g *GoFlip) gpioSubscriber() {
 
 func initGPIO() error {
 	if !rpi.Present() {
-		return errors.New("Not running on raspberry pi")
+		return errors.New("not running on raspberry pi")
 	}
 
 	if _, err := host.Init(); err != nil {
