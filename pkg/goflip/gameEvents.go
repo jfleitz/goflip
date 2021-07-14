@@ -103,6 +103,11 @@ func (g *GoFlip) PlayerEnd() {
 }
 
 func (g *GoFlip) PlayerUp() {
+	if g.gameState != GameStart {
+		log.Warnln("PlayerUp called, but game is not started")
+		return
+	}
+
 	log.Infoln("PlayerUp() called")
 
 	if g.TestMode {
@@ -110,21 +115,6 @@ func (g *GoFlip) PlayerUp() {
 	}
 
 	g.BallScore = 0 //reset before any points are added
-
-	defer func() {
-		if g.gameState == GameStart {
-			//	g.BlinkOnlyOneDisplay(g.CurrentPlayer - 1)
-			for _, f := range g.Observers {
-				f.PlayerUp(g.CurrentPlayer)
-			}
-			log.Infoln("GoFlip: PlayerUp. IsGameInPlay. BallInPlay, CurrentPlayer:", g.BallInPlay, g.CurrentPlayer)
-		} else {
-			//	g.BlinkOnlyOneDisplay(4) //credit display
-			//	g.BlinkDisplay(4, false)
-			log.Infoln("GoFlip: PlayerUp. IsGameInPlay = false")
-		}
-
-	}()
 
 	if g.BallInPlay == 0 {
 		//first time we are playing
@@ -141,7 +131,7 @@ func (g *GoFlip) PlayerUp() {
 			g.CurrentPlayer = 1
 		} else {
 			//game over
-			g.GameOver()
+			g.ChangeGameState(GameOver)
 			return
 		}
 	}
@@ -152,7 +142,10 @@ func (g *GoFlip) PlayerUp() {
 		for _, f := range g.Observers {
 			f.PlayerStart(g.CurrentPlayer)
 		}
-		return
+	}
+
+	for _, f := range g.Observers {
+		f.PlayerUp(g.CurrentPlayer)
 	}
 }
 

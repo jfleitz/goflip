@@ -65,7 +65,8 @@ const (
 type PState int
 
 const (
-	PlayerUp PState = iota
+	NoPlayer PState = iota
+	PlayerUp
 	PlayerEnd
 	PlayerFinish
 )
@@ -90,6 +91,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	go StartServer()
 	g.gameState = Init
+	g.playerState = NoPlayer
 
 	log.AddHook(MsgHook{})
 	g.PlayerEndChannel = make(chan bool)
