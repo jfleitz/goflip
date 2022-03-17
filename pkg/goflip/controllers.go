@@ -4,56 +4,29 @@ package goflip
 //https://github.com/google/periph/blob/v3.6.8/experimental/devices/pca9685/example_test.go
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 )
+
+const KeepAliveMS = 250
 
 func (g *GoFlip) LampSubscriber() {
 	log.Infoln("Starting LDU subscribing")
 	for {
+		select {
+		case msg := <-g.LampControl:
+			if msg.value > FastBlink {
+				log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
+				return
+			}
+			msg.value += 1 //hate to do this, but have to so that the constants btw arduino and goflip are compatible for now. Fix later
 
-		msg := <-g.LampControl
-
-		//This is temp::::
-		if msg.value > FastBlink {
-			log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
-			return
+			g.devices.ldu.SendMessage(msg)
+		case <-time.After(time.Millisecond * KeepAliveMS):
+			msg := deviceMessage{id: 0, value: 0}
+			g.devices.ldu.SendMessage(msg)
 		}
-		msg.value += 1 //hate to do this, but have to so that the constants btw arduino and goflip are compatible for now. Fix later
-
-		//		log.Debugf("Lamp Msg id:%d value:%d\n", msg.id, msg.value)
-
-		//	log.Infoln("received message")
-
-		//select {
-		//case msg := <-_lmpControl:
-		//format the message and send to the LDU
-		//{[lampID][ControlID]} where ControlID is 0 = 0 off,1 = on,2 = slow,3 = fast
-
-		g.devices.ldu.SendMessage(msg)
-		//JAF TODO: put this back in
-		/*		switch msg.value {
-				case On:
-					g.devices.ldu.SendMessage(msg)
-				case Off:
-					g.devices.ldu.SendMessage(msg)
-				case SlowBlink:
-					g.devices.ldu.SendMessage(msg)
-				case FastBlink:
-					g.devices.ldu.SendMessage(msg)
-				default:
-					log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
-				}*/
-
-		//	}
-
-		/*
-			To change:
-			0 0 xx xxxx = off
-			0 1 xx xxxx = on
-			1 0 xx xxxx = slow blink
-			1 1 xx xxxx = fast blink
-		*/
-
 	}
 }
 

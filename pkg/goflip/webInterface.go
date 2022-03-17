@@ -41,12 +41,13 @@ type MsgHook struct {
 }
 
 func (h MsgHook) Fire(e *log.Entry) error {
-	msg, err := json.Marshal(e)
-	if err != nil {
+	//msg, err := json.Marshal(e)
+	//JAF TODO FIX
+	/*	if err != nil {
 		return err
-	}
+	}*/
 	go func() {
-		Broadcast("msg", string(msg))
+		Broadcast("msg", e.Message)
 	}()
 	return nil
 }
