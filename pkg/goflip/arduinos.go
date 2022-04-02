@@ -53,7 +53,7 @@ func (a *arduinos) ReadPorts() {
 			//call and ack the device.
 			val := "/dev/" + f.Name()
 			a.ports = append(a.ports, val)
-			log.Infof("Found arduino at %s\n", val)
+			log.Debugf("Found arduino at %s\n", val)
 		}
 	}
 }
@@ -94,23 +94,23 @@ func (a *arduinos) Connect() bool {
 		}
 
 		//first character should be what we got back.
-		log.Infof("buf is %v", buf[0])
+		log.Debugf("buf is %v", buf[0])
 		switch buf[0] {
 		case 'a':
 			a.switchMatrix.port = port
 			a.switchMatrix.conn = s
 			a.switchMatrix.consoleMode = false
-			log.Infof("SwitchMatrix Arduino connected at %s\n", port)
+			log.Debugf("SwitchMatrix Arduino connected at %s\n", port)
 		case 'b':
 			a.ldu.port = port
 			a.ldu.conn = s
 			a.ldu.consoleMode = false
-			log.Infof("LDU Arduino connected at %s\n", port)
+			log.Debugf("LDU Arduino connected at %s\n", port)
 		case 'c':
 			a.sdu.port = port
 			a.sdu.conn = s
 			a.sdu.consoleMode = false
-			log.Infof("SDU Arduino connected at %s\n", port)
+			log.Debugf("SDU Arduino connected at %s\n", port)
 		}
 	}
 
@@ -152,13 +152,13 @@ func (ard *swarduino) ReadSwitch() []SwitchEvent {
 		if len(vals) == 2 {
 			var s SwitchEvent
 			s.SwitchID, _ = strconv.Atoi(vals[0])
-			log.Infof("vals[1] = %v", vals[1])
+			log.Debugf("vals[1] = %v", vals[1])
 			Pressed, _ := strconv.Atoi(vals[1])
-			log.Infof("Pressed = %d", Pressed)
+			log.Debugf("Pressed = %d", Pressed)
 			s.Pressed = (Pressed == 1)
 			ret = make([]SwitchEvent, 1)
 
-			log.Infof("Switch %d Pressed = %v\n", s.SwitchID, s.Pressed)
+			log.Debugf("Switch %d Pressed = %v\n", s.SwitchID, s.Pressed)
 			ret[0] = s
 			return ret
 		}
@@ -170,7 +170,7 @@ func (ard *swarduino) ReadSwitch() []SwitchEvent {
 		log.Errorf("Error reading switch: %v", err)
 	}
 
-	log.Infof("bytes received: %d", n)
+	log.Debugf("bytes received: %d", n)
 
 	ret = make([]SwitchEvent, n)
 	for i := 0; i < n; i++ {
@@ -180,7 +180,7 @@ func (ard *swarduino) ReadSwitch() []SwitchEvent {
 		s.SwitchID = int(sw >> 1)
 		ret = append(ret, s)
 
-		log.Infof("SW Received: %v, SwitchID=%d, Pressed = %v", sw, s.SwitchID, s.Pressed)
+		log.Debugf("SW Received: %v, SwitchID=%d, Pressed = %v", sw, s.SwitchID, s.Pressed)
 	}
 	return ret
 }
@@ -193,7 +193,7 @@ func (a *arduino) SendMessage(d deviceMessage) error {
 	tosend[1] = (byte)(d.id)
 	tosend[2] = (byte)(d.value)
 
-	//	log.Infof("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
+	//	log.Debugf("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(tosend)
 	return err
 }
@@ -215,7 +215,7 @@ func (a *arduino) SendShortMessage(d deviceMessage, cmdSize int) error {
 
 	}
 
-	//	log.Infof("Sending short message for %d:%d to %s", d.id, d.value, a.port)
+	//	log.Debugf("Sending short message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(b)
 
 	return err

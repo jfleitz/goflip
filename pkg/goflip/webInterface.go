@@ -117,7 +117,7 @@ func StartServer() {
 
 	var port = ":8080"
 
-	log.Infof("Server listening - http://%s%s", "127.0.0.1", port)
+	log.Debugf("Server listening - http://%s%s", "127.0.0.1", port)
 
 	err := http.ListenAndServe(port, nil)
 

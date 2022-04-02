@@ -46,7 +46,7 @@ is called only once:
 func (p *sampleObserver) Init() {
 	/*using logrus package for logging. Best practice to call logging when
 	only necessary and not in routines that are called a lot*/
-	log.Infoln("sampleObserver:Init called")
+	log.Debugln("sampleObserver:Init called")
 
 }
 

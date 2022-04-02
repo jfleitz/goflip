@@ -24,7 +24,7 @@ BallInPlay = called when a ball is launched
 
 //GameStart is called when a game is started (when the first player gets a credit)
 func (g *GoFlip) GameStart() {
-	log.Infoln("gameEvents:GameStart()")
+	log.Debugln("gameEvents:GameStart()")
 
 	if g.TestMode {
 		return
@@ -46,7 +46,7 @@ func (g *GoFlip) GameStart() {
 func (g *GoFlip) GameOver() {
 	g.SetBallInPlayDisp(blankScore)
 
-	log.Infoln("gameEvents:GameOver()")
+	log.Debugln("gameEvents:GameOver()")
 
 	if g.TestMode {
 		return
@@ -61,7 +61,7 @@ func (g *GoFlip) GameOver() {
 }
 
 func (g *GoFlip) BallDrained() {
-	log.Infoln("BallDrained() called")
+	log.Debugln("BallDrained() called")
 
 	if g.TestMode {
 		return
@@ -73,7 +73,7 @@ func (g *GoFlip) BallDrained() {
 }
 
 func (g *GoFlip) PlayerFinish() {
-	log.Infoln("PlayerFinish() called")
+	log.Debugln("PlayerFinish() called")
 
 	if g.TestMode {
 		return
@@ -108,7 +108,7 @@ func (g *GoFlip) PlayerUp() {
 		return
 	}
 
-	log.Infoln("PlayerUp() called")
+	log.Debugln("PlayerUp() called")
 
 	if g.TestMode {
 		return
@@ -150,7 +150,7 @@ func (g *GoFlip) PlayerUp() {
 }
 
 func (g *GoFlip) AddPlayer() {
-	log.Infoln("AddPlayer() called")
+	log.Debugln("AddPlayer() called")
 
 	if g.TestMode {
 		return
@@ -165,7 +165,7 @@ func (g *GoFlip) AddPlayer() {
 		g.NumOfPlayers++
 
 		g.ShowDisplay(g.NumOfPlayers, true)
-		log.Infof("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
+		log.Debugf("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
 
 		for _, f := range g.Observers {
 			f.PlayerAdded(g.NumOfPlayers)

@@ -60,7 +60,7 @@ func (g *GoFlip) gpioSubscriber() {
 		return
 	}
 
-	log.Infoln("Starting gpio subscribing")
+	log.Debugln("Starting gpio subscribing")
 	for {
 		select {
 		case dspMsg := <-g.DisplayControl:
@@ -82,10 +82,10 @@ func (g *GoFlip) gpioSubscriber() {
 			}() //doing this so that we can retrigger another sound of the same right after
 
 		case pwmMessage := <-g.PWMControl:
-			log.Infof("PWM request for %d:%d", pwmMessage.portID, pwmMessage.value)
+			log.Debugf("PWM request for %d:%d", pwmMessage.portID, pwmMessage.value)
 		case <-time.After(time.Millisecond * 100):
 			if endLoop {
-				log.Infoln("gpioSubscriber has ended")
+				log.Debugln("gpioSubscriber has ended")
 				break
 			}
 		}
@@ -293,7 +293,7 @@ func (g *GoFlip) SetDisplay(display int, value int32) {
 func (g *GoFlip) ShowDisplay(display int, on bool) {
 	if on {
 		g.SetDisplay(display, 0)
-		log.Infof("ShowDisplay called setting disp on for %d\n", display)
+		log.Debugf("ShowDisplay called setting disp on for %d\n", display)
 	} else {
 		g.SetDisplay(display, blankScore)
 	}

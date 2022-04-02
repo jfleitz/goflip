@@ -14,6 +14,7 @@ type GoFlip struct {
 	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
+	Credits         int
 	MaxPlayers      int //max players supported by the game
 	NumOfPlayers    int //number of players playing
 	LampControl     chan deviceMessage
@@ -157,11 +158,11 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	//handler for calling switch event routine:
 
 	go func() {
-		log.Infoln("Starting switch monitoring")
+		log.Debugln("Starting switch monitoring")
 		for {
 			//buf := make([]byte, 16) //shouldn't be over 1 byte really
 			buf := g.devices.switchMatrix.ReadSwitch()
-			log.Infof("Received %d switch events", len(buf))
+			log.Debugf("Received %d switch events", len(buf))
 
 			//we should never receive 0 switch events... so if we do, maybe we stop and reinitialize??
 
@@ -193,7 +194,7 @@ func (g *GoFlip) AddScore(points int) {
 	}
 	g.Scores[g.CurrentPlayer-1] += int32(points)
 	g.BallScore += int32(points)
-	log.Infof("goFlip:BallScore = %d\n", g.BallScore)
+	log.Debugf("goFlip:BallScore = %d\n", g.BallScore)
 
 	//refresh display
 	g.SetDisplay(g.CurrentPlayer, g.PlayerScore(g.CurrentPlayer))
@@ -234,7 +235,7 @@ func (g *GoFlip) SendStats() {
 		log.Errorln("Error in marshalling:", err)
 		return
 	}
-	//log.Infoln("Sending json:", string(statb))
+	//log.Debugln("Sending json:", string(statb))
 	Broadcast("stat", string(statb))
 
 }

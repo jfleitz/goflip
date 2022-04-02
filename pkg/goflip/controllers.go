@@ -12,7 +12,7 @@ import (
 const KeepAliveMS = 250
 
 func (g *GoFlip) LampSubscriber() {
-	log.Infoln("Starting LDU subscribing")
+	log.Debugln("Starting LDU subscribing")
 	for {
 		select {
 		case msg := <-g.LampControl:
@@ -31,7 +31,7 @@ func (g *GoFlip) LampSubscriber() {
 }
 
 func (g *GoFlip) SolenoidSubscriber() {
-	log.Infoln("Starting Solenoid subscribing")
+	log.Debugln("Starting Solenoid subscribing")
 
 	for {
 
