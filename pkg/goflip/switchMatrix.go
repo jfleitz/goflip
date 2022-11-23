@@ -1,8 +1,11 @@
 package goflip
 
-import "io"
-import "time"
-import log "github.com/sirupsen/logrus"
+import (
+	"io"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 const swBufferSize = 100
 const swAckNakTime = 500
@@ -37,6 +40,7 @@ func SwitchMatrixHandler(serialPort io.ReadWriteCloser, gameIn chan SwitchValue)
 		}
 	}()
 
+	//JAF TODO... What was I thinking???? This seems like it could be replaced with just a sleep return on the case statement below. Check this
 	timeout := make(chan bool, 1)
 	go func() {
 		time.Sleep(swAckNakTime * time.Millisecond)

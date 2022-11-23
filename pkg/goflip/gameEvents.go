@@ -1,7 +1,7 @@
 package goflip
 
 import (
-	"time"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -24,7 +24,7 @@ BallInPlay = called when a ball is launched
 
 //GameStart is called when a game is started (when the first player gets a credit)
 func (g *GoFlip) GameStart() {
-	log.Infoln("gameEvents:GameStart()")
+	log.Debugln("gameEvents:GameStart()")
 
 	if g.TestMode {
 		return
@@ -34,7 +34,6 @@ func (g *GoFlip) GameStart() {
 	g.BallInPlay = 0 //nextup will queue this up
 	g.NumOfPlayers = 0
 	g.CurrentPlayer = 0
-	g.GameRunning = true
 	g.ClearScores()
 
 	for _, f := range g.Observers {
@@ -45,7 +44,9 @@ func (g *GoFlip) GameStart() {
 
 //GameOver should be called when it is game over.
 func (g *GoFlip) GameOver() {
-	log.Infoln("gameEvents:GameOver()")
+	g.SetBallInPlayDisp(blankScore)
+
+	log.Debugln("gameEvents:GameOver()")
 
 	if g.TestMode {
 		return
@@ -57,11 +58,10 @@ func (g *GoFlip) GameOver() {
 		f.GameOver()
 	}
 
-	g.GameRunning = false
 }
 
 func (g *GoFlip) BallDrained() {
-	log.Infoln("BallDrained() called")
+	log.Debugln("BallDrained() called")
 
 	if g.TestMode {
 		return
@@ -73,7 +73,7 @@ func (g *GoFlip) BallDrained() {
 }
 
 func (g *GoFlip) PlayerFinish() {
-	log.Infoln("PlayerFinish() called")
+	log.Debugln("PlayerFinish() called")
 
 	if g.TestMode {
 		return
@@ -85,43 +85,36 @@ func (g *GoFlip) PlayerFinish() {
 }
 
 func (g *GoFlip) PlayerEnd() {
-	log.Infoln("PlayerEnd() called")
-
 	if g.TestMode {
 		return
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(len(g.Observers))
+
 	for _, f := range g.Observers {
-		f.PlayerEnd(g.CurrentPlayer)
+		f.PlayerEnd(g.CurrentPlayer, &wait)
 	}
 
-	time.Sleep(1 * time.Second) //give a slight pause before ejecting the ball
-	g.PlayerUp()                //call for the next ball or player if there is one
+	go func() {
+		wait.Wait() //need to wait for all observers to be done with any goroutines.
+		g.ChangePlayerState(PlayerUp)
+	}()
 }
 
 func (g *GoFlip) PlayerUp() {
-	log.Infoln("PlayerUp() called")
+	if g.gameState != GameStart {
+		log.Warnln("PlayerUp called, but game is not started")
+		return
+	}
+
+	log.Debugln("PlayerUp() called")
 
 	if g.TestMode {
 		return
 	}
 
 	g.BallScore = 0 //reset before any points are added
-
-	defer func() {
-		if g.GameRunning {
-			//	g.BlinkOnlyOneDisplay(g.CurrentPlayer - 1)
-			for _, f := range g.Observers {
-				f.PlayerUp(g.CurrentPlayer)
-			}
-			log.Infoln("GoFlip: PlayerUp. IsGameInPlay. BallInPlay, CurrentPlayer:", g.BallInPlay, g.CurrentPlayer)
-		} else {
-			//	g.BlinkOnlyOneDisplay(4) //credit display
-			//	g.BlinkDisplay(4, false)
-			log.Infoln("GoFlip: PlayerUp. IsGameInPlay = false")
-		}
-
-	}()
 
 	if g.BallInPlay == 0 {
 		//first time we are playing
@@ -138,13 +131,7 @@ func (g *GoFlip) PlayerUp() {
 			g.CurrentPlayer = 1
 		} else {
 			//game over
-			log.Infoln("GameOver is going to be called")
-			g.DebugOutDisplays()
-			g.SetBallInPlayDisp(blankScore)
-			g.DebugOutDisplays()
-			g.GameOver()
-			g.DebugOutDisplays()
-			log.Infoln("GameOver was called")
+			g.ChangeGameState(GameOver)
 			return
 		}
 	}
@@ -155,12 +142,15 @@ func (g *GoFlip) PlayerUp() {
 		for _, f := range g.Observers {
 			f.PlayerStart(g.CurrentPlayer)
 		}
-		return
+	}
+
+	for _, f := range g.Observers {
+		f.PlayerUp(g.CurrentPlayer)
 	}
 }
 
 func (g *GoFlip) AddPlayer() {
-	log.Infoln("AddPlayer() called")
+	log.Debugln("AddPlayer() called")
 
 	if g.TestMode {
 		return
@@ -175,7 +165,7 @@ func (g *GoFlip) AddPlayer() {
 		g.NumOfPlayers++
 
 		g.ShowDisplay(g.NumOfPlayers, true)
-		log.Infof("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
+		log.Debugf("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
 
 		for _, f := range g.Observers {
 			f.PlayerAdded(g.NumOfPlayers)

@@ -46,14 +46,14 @@ func maintest() {
 				sduPort = s
 				break
 			default:
-				log.Infof("Unknown connected device: %v", s)
+				log.Debugf("Unknown connected device: %v", s)
 			}
 		}
 	}
 
-	log.Infof("SwitchMatrix Arduino connected at: %s", swPort)
-	log.Infof("LDU Arduino connected at: %s", lduPort)
-	log.Infof("SDU Arduino connected at: %s", sduPort)
+	log.Debugf("SwitchMatrix Arduino connected at: %s", swPort)
+	log.Debugf("LDU Arduino connected at: %s", lduPort)
+	log.Debugf("SDU Arduino connected at: %s", sduPort)
 
 	sendCommand(lduPort, "p2") //slow flash the LDU led
 	sendCommand(sduPort, "@y") //turn the LED on the SDU board for awhile

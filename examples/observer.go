@@ -22,11 +22,13 @@ func main() {
 
 */
 
-package sample //this will probably be package main in your app
+package goflip //this will probably be package main in your app
 
 import (
-	log "github.com/sirupsen/logrus"
+	"sync"
+
 	"github.com/jfleitz/goflip"
+	log "github.com/sirupsen/logrus"
 )
 
 type sampleObserver struct {
@@ -44,7 +46,7 @@ is called only once:
 func (p *sampleObserver) Init() {
 	/*using logrus package for logging. Best practice to call logging when
 	only necessary and not in routines that are called a lot*/
-	log.Infoln("sampleObserver:Init called")
+	log.Debugln("sampleObserver:Init called")
 
 }
 
@@ -73,8 +75,8 @@ func (p *sampleObserver) PlayerStart(playerID int) {
 }
 
 /*PlayerEnd is called after every ball for the player is over*/
-func (p *sampleObserver) PlayerEnd(playerID int) {
-
+func (p *sampleObserver) PlayerEnd(playerID int, wait *sync.WaitGroup) {
+	defer wait.Done()
 }
 
 /*PlayerEnd is called after the very last ball for the player is over (after ball 3 for example*/

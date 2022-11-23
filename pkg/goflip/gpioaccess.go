@@ -8,10 +8,16 @@ import (
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/host"
 	"periph.io/x/periph/host/rpi"
+
+	"github.com/googolgl/go-i2c"
+	"github.com/googolgl/go-pca9685"
 )
 
 var _disp [5][7]byte //this holds what we want to show on the display. Bytes are in terms of what the 74ls48 supports (0x0f is blank)
 var _sound byte
+var _i2c *i2c.Options
+var _pca0 *pca9685.PCA9685
+var _servo0 *pca9685.Servo
 
 const (
 	blank           byte = 0x0f //what is sent to the 7448 on the display board to blank the 7 seg disp
@@ -41,8 +47,7 @@ type soundMessage struct {
 }
 
 type pwmMessage struct {
-	portID int
-	value  int
+	angle int
 }
 
 var endLoop bool
@@ -55,12 +60,14 @@ func (g *GoFlip) gpioInit() {
 }
 
 func (g *GoFlip) gpioSubscriber() {
-	err := initGPIO()
+	err := g.initGPIO()
 	if err != nil {
 		return
 	}
 
-	log.Infoln("Starting gpio subscribing")
+	log.Debugln("Starting gpio subscribing")
+
+subscriberloop:
 	for {
 		select {
 		case dspMsg := <-g.DisplayControl:
@@ -82,19 +89,23 @@ func (g *GoFlip) gpioSubscriber() {
 			}() //doing this so that we can retrigger another sound of the same right after
 
 		case pwmMessage := <-g.PWMControl:
-			log.Infof("PWM request for %d:%d", pwmMessage.portID, pwmMessage.value)
+			log.Debugf("PWM request for %d", pwmMessage.angle)
+			go func() {
+				_servo0.Angle(pwmMessage.angle)
+			}()
 		case <-time.After(time.Millisecond * 100):
 			if endLoop {
-				log.Infoln("gpioSubscriber has ended")
-				break
+				log.Debugln("gpioSubscriber has ended")
+				break subscriberloop
 			}
+
 		}
 	}
 }
 
-func initGPIO() error {
+func (g *GoFlip) initGPIO() error {
 	if !rpi.Present() {
-		return errors.New("Not running on raspberry pi")
+		return errors.New("not running on raspberry pi")
 	}
 
 	if _, err := host.Init(); err != nil {
@@ -103,8 +114,35 @@ func initGPIO() error {
 	}
 
 	initPorts()
+	g.initPWM()
 
 	return nil
+}
+
+func (g *GoFlip) initPWM() {
+	// Create new connection to i2c-bus on 1 line with address 0x40.
+	// Use i2cdetect utility to find device address over the i2c-bus
+	_i2c, err := i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	o := pca9685.ServOptions{
+		AcRange:  g.PWMPortConfig.ArcRange, //180
+		MinPulse: g.PWMPortConfig.PulseMin, //500,
+		MaxPulse: g.PWMPortConfig.PulseMax, //2500,
+	}
+
+	_pca0, err = pca9685.New(_i2c, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Sets a single PWM channel 0
+	//_pca0.SetChannel(0, 0, 180) //JAF maybe not need this? TEST
+
+	// Servo on channel 0
+	_servo0 = _pca0.ServoNew(0, &o)
 }
 
 func initPorts() {
@@ -293,7 +331,7 @@ func (g *GoFlip) SetDisplay(display int, value int32) {
 func (g *GoFlip) ShowDisplay(display int, on bool) {
 	if on {
 		g.SetDisplay(display, 0)
-		log.Infof("ShowDisplay called setting disp on for %d\n", display)
+		log.Debugf("ShowDisplay called setting disp on for %d\n", display)
 	} else {
 		g.SetDisplay(display, blankScore)
 	}
@@ -320,4 +358,12 @@ func (g *GoFlip) DebugOutDisplays() {
 		log.Debugf("Display Array %d: ", i)
 		log.Debugln(val)
 	}
+}
+
+func (g *GoFlip) ServoAngle(angle int) {
+	var msg pwmMessage
+
+	msg.angle = angle
+
+	g.PWMControl <- msg
 }

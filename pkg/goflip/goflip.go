@@ -3,6 +3,7 @@ package goflip
 //to build: env GOOS=linux GOARCH=arm GOARM=5 go build
 import (
 	"encoding/json"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -13,6 +14,7 @@ type GoFlip struct {
 	BallInPlay      int //If no ball, then 0.
 	ExtraBall       bool
 	TotalBalls      int
+	Credits         int
 	MaxPlayers      int //max players supported by the game
 	NumOfPlayers    int //number of players playing
 	LampControl     chan deviceMessage
@@ -21,33 +23,46 @@ type GoFlip struct {
 	DisplayControl  chan displayMessage
 	SoundControl    chan soundMessage
 	PWMControl      chan pwmMessage
+	PWMPortConfig   PWMConfig
 	switchStates    []bool
 	lampStates      map[int]int
 	Observers       []Observer
 	CurrentPlayer   int
 	ObserverEvents  chan SwitchEvent
-	GameRunning     bool  //Whether a game is going on = true, or game is over = false
-	BallScore       int32 //current score for the ball in play
-	TestMode        bool  //states whether we are in Test Mode or not
-	DiagObserver    Observer
+	//GameRunning      bool  //Whether a game is going on = true, or game is over = false
+	BallScore        int32 //current score for the ball in play
+	TestMode         bool  //states whether we are in Test Mode or not
+	DiagObserver     Observer
+	PlayerEndChannel chan bool
+	gameState        GState
+	playerState      PState
+	Quitting         bool //Notifies all go routines that the running application is quitting
 }
 
 type Observer interface {
-	Init()                     //Called from the beginning when the game is first turned on
-	GameStart()                //Called when a game starts
-	PlayerAdded(playerID int)  //Called when a player is added to the current game
-	PlayerStart(int)           //Called the very first time a player is playing (their first Ball1)
-	PlayerUp(int)              //called when a new player is up (passing the player number in as well.. zero based)
-	PlayerEnd(int)             //called after ever ball is ended for the player (after ball drain)
-	PlayerFinish(int)          //called after the very last ball for the player is over (after ball 3 for example)
-	SwitchHandler(SwitchEvent) //called every time a switch event occurs
-	BallDrained()              //calls when a ball is drained
-	GameOver()                 //called when a game is over
+	Init()                          //Called from the beginning when the game is first turned on
+	GameStart()                     //Called when a game starts
+	PlayerAdded(playerID int)       //Called when a player is added to the current game
+	PlayerStart(int)                //Called the very first time a player is playing (their first Ball1)
+	PlayerUp(int)                   //called when a new player is up (passing the player number in as well.. zero based)
+	PlayerEnd(int, *sync.WaitGroup) //called after every ball is ended for the player (after ball drain)
+	PlayerFinish(int)               //called after the very last ball for the player is over (after ball 3 for example)
+	SwitchHandler(SwitchEvent)      //called every time a switch event occurs
+	BallDrained()                   //calls when a ball is drained
+	GameOver()                      //called when a game is over
 }
 
 type SwitchEvent struct {
 	SwitchID int
 	Pressed  bool
+}
+
+//PWMConfig holds the configuration for the gpio PWM port to be used to control a servo
+type PWMConfig struct {
+	ArcRange      int
+	PulseMin      float32
+	PulseMax      float32
+	DeviceAddress string
 }
 
 const (
@@ -58,7 +73,25 @@ const (
 	ack       = iota //when used, it doesn't matter what ID is.
 )
 
+type PState int
+
+const (
+	NoPlayer PState = iota
+	PlayerUp
+	PlayerEnd
+	PlayerFinish
+)
+
 const consoleMode bool = false
+const QUIT = -1 //ID passed to channels to let goRoutines to quit
+
+type GState int
+
+const (
+	Init GState = iota
+	GameStart
+	GameOver
+)
 
 type deviceMessage struct {
 	id    int
@@ -69,8 +102,11 @@ type deviceMessage struct {
 func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	go StartServer()
+	g.gameState = Init
+	g.playerState = NoPlayer
 
 	log.AddHook(MsgHook{})
+	g.PlayerEndChannel = make(chan bool)
 
 	g.LampControl = make(chan deviceMessage)
 	g.SolenoidControl = make(chan deviceMessage)
@@ -126,6 +162,10 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 					}
 				}
 
+				if sw.SwitchID == QUIT {
+					return
+				}
+
 			}
 		}
 	}()
@@ -133,11 +173,11 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	//handler for calling switch event routine:
 
 	go func() {
-		log.Infoln("Starting switch monitoring")
+		log.Debugln("Starting switch monitoring")
 		for {
 			//buf := make([]byte, 16) //shouldn't be over 1 byte really
 			buf := g.devices.switchMatrix.ReadSwitch()
-			log.Infof("Received %d switch events", len(buf))
+			log.Debugf("Received %d switch events", len(buf))
 
 			//we should never receive 0 switch events... so if we do, maybe we stop and reinitialize??
 
@@ -169,7 +209,7 @@ func (g *GoFlip) AddScore(points int) {
 	}
 	g.Scores[g.CurrentPlayer-1] += int32(points)
 	g.BallScore += int32(points)
-	log.Infof("goFlip:BallScore = %d\n", g.BallScore)
+	log.Debugf("goFlip:BallScore = %d\n", g.BallScore)
 
 	//refresh display
 	g.SetDisplay(g.CurrentPlayer, g.PlayerScore(g.CurrentPlayer))
@@ -210,7 +250,66 @@ func (g *GoFlip) SendStats() {
 		log.Errorln("Error in marshalling:", err)
 		return
 	}
-	//log.Infoln("Sending json:", string(statb))
+	//log.Debugln("Sending json:", string(statb))
 	Broadcast("stat", string(statb))
 
+}
+
+func (g *GoFlip) GetPlayerState() PState {
+	return g.playerState
+}
+
+func (g *GoFlip) ChangePlayerState(newState PState) bool {
+	if g.playerState == newState {
+		//already at this state, so don't change
+		return false
+	}
+
+	g.playerState = newState
+	switch g.playerState {
+	case PlayerUp:
+		g.PlayerUp()
+	case PlayerEnd:
+		g.PlayerEnd()
+	case PlayerFinish:
+		g.PlayerFinish()
+	}
+	return true
+
+}
+
+func (g *GoFlip) GetGameState() GState {
+	return g.gameState
+}
+
+func (g *GoFlip) ChangeGameState(newState GState) bool {
+	if g.gameState == newState {
+		//already in the current state
+		return false
+	}
+
+	g.gameState = newState
+
+	switch g.gameState {
+	case GameOver:
+		g.GameOver()
+	case GameStart:
+		g.GameStart()
+	}
+
+	return true
+}
+
+//Quit tells all channels and go routines that the application is ending, to attempt to
+//nicely disconnect to all peripherals, etc.
+func (g *GoFlip) Quit() {
+	g.Quitting = true
+
+	var msg deviceMessage
+	msg.id = QUIT
+	msg.value = 0
+
+	g.LampControl <- msg
+	g.SolenoidControl <- msg
+	g.BroadcastEvent(SwitchEvent{SwitchID: QUIT, Pressed: true})
 }

@@ -41,12 +41,13 @@ type MsgHook struct {
 }
 
 func (h MsgHook) Fire(e *log.Entry) error {
-	msg, err := json.Marshal(e)
-	if err != nil {
+	//msg, err := json.Marshal(e)
+	//JAF TODO FIX
+	/*	if err != nil {
 		return err
-	}
+	}*/
 	go func() {
-		Broadcast("msg", string(msg))
+		Broadcast("msg", e.Message)
 	}()
 	return nil
 }
@@ -116,7 +117,7 @@ func StartServer() {
 
 	var port = ":8080"
 
-	log.Infof("Server listening - http://%s%s", "127.0.0.1", port)
+	log.Debugf("Server listening - http://%s%s", "127.0.0.1", port)
 
 	err := http.ListenAndServe(port, nil)
 
