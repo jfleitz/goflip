@@ -23,6 +23,7 @@ type GoFlip struct {
 	DisplayControl  chan displayMessage
 	SoundControl    chan soundMessage
 	PWMControl      chan pwmMessage
+	PWMPortConfig   PWMConfig
 	switchStates    []bool
 	lampStates      map[int]int
 	Observers       []Observer
@@ -35,6 +36,7 @@ type GoFlip struct {
 	PlayerEndChannel chan bool
 	gameState        GState
 	playerState      PState
+	Quitting         bool //Notifies all go routines that the running application is quitting
 }
 
 type Observer interface {
@@ -55,6 +57,14 @@ type SwitchEvent struct {
 	Pressed  bool
 }
 
+//PWMConfig holds the configuration for the gpio PWM port to be used to control a servo
+type PWMConfig struct {
+	ArcRange      int
+	PulseMin      float32
+	PulseMax      float32
+	DeviceAddress string
+}
+
 const (
 	Off       = 0    //can be used for Solenoids or Lamp
 	On        = 1    //can be used for Solenoids or Lamp
@@ -73,6 +83,7 @@ const (
 )
 
 const consoleMode bool = false
+const QUIT = -1 //ID passed to channels to let goRoutines to quit
 
 type GState int
 
@@ -149,6 +160,10 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 					for _, f := range g.Observers {
 						f.SwitchHandler(sw)
 					}
+				}
+
+				if sw.SwitchID == QUIT {
+					return
 				}
 
 			}
@@ -283,4 +298,18 @@ func (g *GoFlip) ChangeGameState(newState GState) bool {
 	}
 
 	return true
+}
+
+//Quit tells all channels and go routines that the application is ending, to attempt to
+//nicely disconnect to all peripherals, etc.
+func (g *GoFlip) Quit() {
+	g.Quitting = true
+
+	var msg deviceMessage
+	msg.id = QUIT
+	msg.value = 0
+
+	g.LampControl <- msg
+	g.SolenoidControl <- msg
+	g.BroadcastEvent(SwitchEvent{SwitchID: QUIT, Pressed: true})
 }

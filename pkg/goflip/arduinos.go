@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"strconv"
 
@@ -58,6 +57,20 @@ func (a *arduinos) ReadPorts() {
 	}
 }
 
+//PortConnect connects to the device at port and returns an open connection
+func (a *arduinos) PortConnect(port string) (serial.Port, error) {
+	mode := &serial.Mode{
+		BaudRate: 38400,
+	}
+
+	s, err := serial.Open(port, mode)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return s, err
+}
+
 func (a *arduinos) Connect() bool {
 	if len(a.ports) == 0 {
 		a.ReadPorts()
@@ -65,22 +78,21 @@ func (a *arduinos) Connect() bool {
 
 	//for each port, we need to open a connection then see what it is, and if it fits the bill, save a ref for it
 	for _, port := range a.ports {
-		mode := &serial.Mode{
+		/*mode := &serial.Mode{
 			BaudRate: 38400,
 		}
 
 		s, err := serial.Open(port, mode)
 		if err != nil {
 			log.Fatal(err)
-		}
+		}*/
 
-		//	c := &goserial.Config{Name: port, Baud: 57600}
+		s, _ := a.PortConnect(port)
 
-		//	s, _ := goserial.OpenPort(c)
-		//wait 3 secs
-		time.Sleep(3 * time.Second)
+		//JAF CHECK maybe not wait..wait 3 secs
+		//time.Sleep(3 * time.Second)
 
-		_, err = s.Write([]byte("|"))
+		_, err := s.Write([]byte("|"))
 
 		if err != nil {
 			log.Errorf("Error in Connect: %v", err)

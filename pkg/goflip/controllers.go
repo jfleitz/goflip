@@ -1,7 +1,6 @@
 package goflip
 
 //JAF TODO... need to send a keepalive to each arduino
-//https://github.com/google/periph/blob/v3.6.8/experimental/devices/pca9685/example_test.go
 
 import (
 	"time"
@@ -16,6 +15,10 @@ func (g *GoFlip) LampSubscriber() {
 	for {
 		select {
 		case msg := <-g.LampControl:
+			if msg.id == QUIT {
+				return
+			}
+
 			if msg.value > FastBlink {
 				log.Errorf("Invalid message value received for Lamp Control: %d", msg.value)
 				return
@@ -36,6 +39,9 @@ func (g *GoFlip) SolenoidSubscriber() {
 	for {
 
 		msg := <-g.SolenoidControl
+		if msg.id == QUIT {
+			return
+		}
 
 		log.Debugf("Solenoid Msg id:%d value:%d\n", msg.id, msg.value)
 		//select {
