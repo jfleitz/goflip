@@ -4,6 +4,7 @@ package goflip
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -57,7 +58,7 @@ type SwitchEvent struct {
 	Pressed  bool
 }
 
-//PWMConfig holds the configuration for the gpio PWM port to be used to control a servo
+// PWMConfig holds the configuration for the gpio PWM port to be used to control a servo
 type PWMConfig struct {
 	ArcRange      int
 	PulseMin      float32
@@ -77,9 +78,9 @@ type PState int
 
 const (
 	NoPlayer PState = iota
-	PlayerUp
-	PlayerEnd
-	PlayerFinish
+	UpPlayer
+	EndPlayer
+	FinishedPlayer
 )
 
 const consoleMode bool = false
@@ -89,8 +90,8 @@ type GState int
 
 const (
 	Init GState = iota
-	GameStart
-	GameOver
+	InProgress
+	GameEnded
 )
 
 type deviceMessage struct {
@@ -98,7 +99,7 @@ type deviceMessage struct {
 	value int //set to one of the constants
 }
 
-//Init is Called just one time in the beginning to Initialize the game
+// Init is Called just one time in the beginning to Initialize the game
 func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	go StartServer()
@@ -125,24 +126,32 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	g.switchStates = make([]bool, 64)
 	g.lampStates = make(map[int]int)
 
-	g.gpioInit()
+	gpioInit()
 
 	//moved this before subbscribers try to connect and write
 	if !consoleMode {
-		if !g.devices.Connect() {
-			log.Warningln("RETRY:Devices were unable to connect")
-			//go ahead and retry once
+		connected := false
+		for i := 0; i < 5; i++ {
 			if !g.devices.Connect() {
-				log.Errorln("Devices were unable to connect. Check USB connections")
-				//return false make this configurable.
-				return true
+				log.Warningf("Devices were unable to connect, Try %d\n", i)
+			} else {
+				connected = true
+				break
 			}
+
+			//try to reconnect every second
+			time.Sleep(1 * time.Second)
+		}
+
+		if !connected {
+			log.Errorln("Devices were unable to connect. Check USB connections")
+			return false
 		}
 	}
 
-	go g.LampSubscriber()
-	go g.SolenoidSubscriber()
-	go g.gpioSubscriber()
+	go LampSubscriber()
+	go SolenoidSubscriber()
+	go gpioSubscriber()
 
 	for _, f := range g.Observers {
 		f.Init()
@@ -194,16 +203,19 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	return true
 }
 
-func (g *GoFlip) BroadcastEvent(sw SwitchEvent) {
+func BroadcastEvent(sw SwitchEvent) {
+	g := GetMachine()
 	g.ObserverEvents <- sw
 }
 
-//IsGameInPlay returns true if a game is going on. False if not.
-func (g *GoFlip) IsGameInPlay() bool {
+// IsGameInPlay returns true if a game is going on. False if not.
+func IsGameInPlay() bool {
+	g := GetMachine()
 	return g.BallInPlay > 0
 }
 
-func (g *GoFlip) AddScore(points int) {
+func AddScore(points int) {
+	g := GetMachine()
 	if g.CurrentPlayer < 1 {
 		return
 	}
@@ -212,21 +224,24 @@ func (g *GoFlip) AddScore(points int) {
 	log.Debugf("goFlip:BallScore = %d\n", g.BallScore)
 
 	//refresh display
-	g.SetDisplay(g.CurrentPlayer, g.PlayerScore(g.CurrentPlayer))
+	SetDisplay(g.CurrentPlayer, PlayerScore(g.CurrentPlayer))
 }
 
-func (g *GoFlip) ClearScores() {
+func ClearScores() {
+	g := GetMachine()
 	for i := range g.Scores {
 		g.Scores[i] = 0
-		g.ShowDisplay(i+1, false)
+		ShowDisplay(i+1, false)
 	}
 }
 
-func (g *GoFlip) PlayerScore(playerNumber int) int32 {
+func PlayerScore(playerNumber int) int32 {
+	g := GetMachine()
 	return g.Scores[playerNumber-1]
 }
 
-func (g *GoFlip) SendStats() {
+func SendStats() {
+	g := GetMachine()
 	stat := GameStats{}
 	stat.BallInPlay = g.BallInPlay
 	stat.Credits = 0
@@ -255,11 +270,13 @@ func (g *GoFlip) SendStats() {
 
 }
 
-func (g *GoFlip) GetPlayerState() PState {
+func GetPlayerState() PState {
+	g := GetMachine()
 	return g.playerState
 }
 
-func (g *GoFlip) ChangePlayerState(newState PState) bool {
+func ChangePlayerState(newState PState) bool {
+	g := GetMachine()
 	if g.playerState == newState {
 		//already at this state, so don't change
 		return false
@@ -267,22 +284,24 @@ func (g *GoFlip) ChangePlayerState(newState PState) bool {
 
 	g.playerState = newState
 	switch g.playerState {
-	case PlayerUp:
-		g.PlayerUp()
-	case PlayerEnd:
-		g.PlayerEnd()
-	case PlayerFinish:
-		g.PlayerFinish()
+	case UpPlayer:
+		PlayerUp()
+	case EndPlayer:
+		PlayerEnd()
+	case FinishedPlayer:
+		PlayerFinish()
 	}
 	return true
 
 }
 
-func (g *GoFlip) GetGameState() GState {
+func GetGameState() GState {
+	g := GetMachine()
 	return g.gameState
 }
 
-func (g *GoFlip) ChangeGameState(newState GState) bool {
+func ChangeGameState(newState GState) bool {
+	g := GetMachine()
 	if g.gameState == newState {
 		//already in the current state
 		return false
@@ -291,18 +310,19 @@ func (g *GoFlip) ChangeGameState(newState GState) bool {
 	g.gameState = newState
 
 	switch g.gameState {
-	case GameOver:
-		g.GameOver()
-	case GameStart:
-		g.GameStart()
+	case GameEnded:
+		GameOver()
+	case InProgress:
+		GameStart()
 	}
 
 	return true
 }
 
-//Quit tells all channels and go routines that the application is ending, to attempt to
-//nicely disconnect to all peripherals, etc.
-func (g *GoFlip) Quit() {
+// Quit tells all channels and go routines that the application is ending, to attempt to
+// nicely disconnect to all peripherals, etc.
+func Quit() {
+	g := GetMachine()
 	g.Quitting = true
 
 	var msg deviceMessage
@@ -311,5 +331,20 @@ func (g *GoFlip) Quit() {
 
 	g.LampControl <- msg
 	g.SolenoidControl <- msg
-	g.BroadcastEvent(SwitchEvent{SwitchID: QUIT, Pressed: true})
+	BroadcastEvent(SwitchEvent{SwitchID: QUIT, Pressed: true})
+}
+
+var machineInstance *GoFlip
+var lock sync.Mutex
+
+func GetMachine() *GoFlip {
+	lock.Lock()
+
+	defer lock.Unlock()
+
+	if machineInstance == nil {
+		machineInstance = new(GoFlip)
+	}
+
+	return machineInstance
 }

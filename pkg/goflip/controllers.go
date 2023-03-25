@@ -10,7 +10,8 @@ import (
 
 const KeepAliveMS = 250
 
-func (g *GoFlip) LampSubscriber() {
+func LampSubscriber() {
+	g := GetMachine()
 	log.Debugln("Starting LDU subscribing")
 	for {
 		select {
@@ -33,7 +34,8 @@ func (g *GoFlip) LampSubscriber() {
 	}
 }
 
-func (g *GoFlip) SolenoidSubscriber() {
+func SolenoidSubscriber() {
+	g := GetMachine()
 	log.Debugln("Starting Solenoid subscribing")
 
 	for {
@@ -66,7 +68,8 @@ func (g *GoFlip) SolenoidSubscriber() {
 	}
 }
 
-func (g *GoFlip) SetLampState(lampID int, state int) {
+func SetLampState(lampID int, state int) {
+	g := GetMachine()
 	if _, ok := g.lampStates[lampID]; !ok {
 		g.lampStates[lampID] = state
 	} else {
@@ -80,56 +83,56 @@ func (g *GoFlip) SetLampState(lampID int, state int) {
 	g.LampControl <- msg
 }
 
-func (g *GoFlip) LampOn(lampID ...int) {
+func LampOn(lampID ...int) {
 	for _, l := range lampID {
-		g.SetLampState(l, On)
-	}
-
-}
-
-func (g *GoFlip) LampOff(lampID ...int) {
-	for _, l := range lampID {
-		g.SetLampState(l, Off)
+		SetLampState(l, On)
 	}
 }
 
-func (g *GoFlip) LampSlowBlink(lampID ...int) {
+func LampOff(lampID ...int) {
 	for _, l := range lampID {
-		g.SetLampState(l, SlowBlink)
+		SetLampState(l, Off)
 	}
 }
 
-func (g *GoFlip) LampFastBlink(lampID ...int) {
-
+func LampSlowBlink(lampID ...int) {
 	for _, l := range lampID {
-		g.SetLampState(l, FastBlink)
+		SetLampState(l, SlowBlink)
 	}
 }
 
-func (g *GoFlip) SolenoidOff(solID int) {
+func LampFastBlink(lampID ...int) {
+
+	for _, l := range lampID {
+		SetLampState(l, FastBlink)
+	}
+}
+
+func SolenoidOff(solID int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = Off
 
+	g := GetMachine()
 	g.SolenoidControl <- msg
 }
-func (g *GoFlip) SolenoidFire(solID int) {
+func SolenoidFire(solID int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = 2 //should be about a 100ms pule when at 2
-
+	g := GetMachine()
 	g.SolenoidControl <- msg
 }
 
-func (g *GoFlip) SolenoidAlwaysOn(solID int) {
+func SolenoidAlwaysOn(solID int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = 0x07
-
+	g := GetMachine()
 	g.SolenoidControl <- msg
 }
 
-func (g *GoFlip) FlipperControl(on bool) {
+func FlipperControl(on bool) {
 	var msg deviceMessage
 	msg.id = 0x0f
 	if on {
@@ -137,22 +140,25 @@ func (g *GoFlip) FlipperControl(on bool) {
 	} else {
 		msg.value = 0x02
 	}
+	g := GetMachine()
 	g.SolenoidControl <- msg
 }
 
-func (g *GoFlip) SolenoidOnDuration(solID int, duration int) {
+func SolenoidOnDuration(solID int, duration int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = duration
-
+	g := GetMachine()
 	g.SolenoidControl <- msg
 }
 
-func (g *GoFlip) SwitchPressed(swID int) bool {
+func SwitchPressed(swID int) bool {
+	g := GetMachine()
 	return g.switchStates[swID]
 }
 
-func (g *GoFlip) GetLampState(lampID int) int {
+func GetLampState(lampID int) int {
+	g := GetMachine()
 	if state, ok := g.lampStates[lampID]; ok {
 		return state
 	}

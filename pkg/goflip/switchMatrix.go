@@ -13,13 +13,13 @@ const initCommand = 1 //recd byte value of 1, means that the Switch Matrix just 
 const ackCommand = 2  //send byte value of 2, we should get a NAK back
 const nakCommand = 3  //recd byte value of 3, means we got a response from our transmission
 
-//SwitchValue contains what was received from the SwitchMatrix board. value = true means just Pressed. value = false means just released
+// SwitchValue contains what was received from the SwitchMatrix board. value = true means just Pressed. value = false means just released
 type SwitchValue struct {
 	SwitchID int8
 	value    bool
 }
 
-//SwitchMatrixHandler communicates with the SwitchMatrix interface board using the port provided
+// SwitchMatrixHandler communicates with the SwitchMatrix interface board using the port provided
 func SwitchMatrixHandler(serialPort io.ReadWriteCloser, gameIn chan SwitchValue) error {
 	if serialPort == nil {
 		return nil

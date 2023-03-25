@@ -57,7 +57,7 @@ func (a *arduinos) ReadPorts() {
 	}
 }
 
-//PortConnect connects to the device at port and returns an open connection
+// PortConnect connects to the device at port and returns an open connection
 func (a *arduinos) PortConnect(port string) (serial.Port, error) {
 	mode := &serial.Mode{
 		BaudRate: 38400,
@@ -210,7 +210,7 @@ func (a *arduino) SendMessage(d deviceMessage) error {
 	return err
 }
 
-//Short Message format is 1 byte long. Top 5 bits is the ID, bottom 3 bits are the value
+// Short Message format is 1 byte long. Top 5 bits is the ID, bottom 3 bits are the value
 func (a *arduino) SendShortMessage(d deviceMessage, cmdSize int) error {
 	b := make([]byte, 1)
 
