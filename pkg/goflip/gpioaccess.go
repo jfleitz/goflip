@@ -69,9 +69,9 @@ func gpioSubscriber() {
 
 subscriberloop:
 	for {
-		g := GetMachine()
+		//g := GetMachine()
 		select {
-		case dspMsg := <-g.DisplayControl:
+		case dspMsg := <-displayControl:
 			if dspMsg.display > 0 && dspMsg.display <= 4 {
 				setScore(dspMsg.display-1, dspMsg.value)
 			} else {
@@ -82,14 +82,14 @@ subscriberloop:
 					setCredits(int8(dspMsg.value))
 				}
 			}
-		case sndMsg := <-g.SoundControl:
+		case sndMsg := <-soundControl:
 			go func() {
 				_sound = sndMsg.soundID
 				time.Sleep(time.Millisecond * 100)
 				_sound = noSound
 			}() //doing this so that we can retrigger another sound of the same right after
 
-		case pwmMessage := <-g.PWMControl:
+		case pwmMessage := <-pWMControl:
 			log.Debugf("PWM request for %d", pwmMessage.angle)
 			go func() {
 				_servo0.Angle(pwmMessage.angle)
@@ -125,9 +125,11 @@ func initPWM() {
 	// Use i2cdetect utility to find device address over the i2c-bus
 	g := GetMachine()
 
-	_i2c, err := i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
+	var err error
+
+	_i2c, err = i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("initPWM(). DeviceAddress passed is: %v, error: %v", g.PWMPortConfig.DeviceAddress, err)
 	}
 
 	o := pca9685.ServOptions{
@@ -138,7 +140,7 @@ func initPWM() {
 
 	_pca0, err = pca9685.New(_i2c, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("initPWM()2: %v", err)
 	}
 
 	// Sets a single PWM channel 0
@@ -209,11 +211,13 @@ func pulse(pin int) {
 	}
 }
 
+/*
 func setDisplay(dispNum int, digits []byte) {
 	for i, d := range digits {
 		_disp[dispNum][i] = d
 	}
 }
+*/
 
 func blankDisplay(dispNum int) {
 	_disp[dispNum] = [...]byte{blank, blank, blank, blank, blank, blank, blank} //initialize to blank disp
@@ -328,8 +332,7 @@ func SetDisplay(display int, value int32) {
 	msg.display = display
 	msg.value = value
 
-	g := GetMachine()
-	g.DisplayControl <- msg
+	displayControl <- msg
 }
 
 func ShowDisplay(display int, on bool) {
@@ -353,8 +356,7 @@ func PlaySound(soundID byte) {
 	var msg soundMessage
 	msg.soundID = soundID
 
-	g := GetMachine()
-	g.SoundControl <- msg
+	soundControl <- msg
 
 }
 
@@ -368,6 +370,5 @@ func DebugOutDisplays() {
 func ServoAngle(angle int) {
 	var msg pwmMessage
 	msg.angle = angle
-	g := GetMachine()
-	g.PWMControl <- msg
+	pWMControl <- msg
 }

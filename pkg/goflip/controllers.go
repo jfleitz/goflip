@@ -13,9 +13,12 @@ const KeepAliveMS = 250
 func LampSubscriber() {
 	g := GetMachine()
 	log.Debugln("Starting LDU subscribing")
+
+	g.devices.ldu.consoleMode = g.ConsoleMode
+
 	for {
 		select {
-		case msg := <-g.LampControl:
+		case msg := <-lampControl:
 			if msg.id == QUIT {
 				return
 			}
@@ -40,7 +43,7 @@ func SolenoidSubscriber() {
 
 	for {
 
-		msg := <-g.SolenoidControl
+		msg := <-solenoidControl
 		if msg.id == QUIT {
 			return
 		}
@@ -80,7 +83,7 @@ func SetLampState(lampID int, state int) {
 	msg.id = lampID
 	msg.value = state
 
-	g.LampControl <- msg
+	lampControl <- msg
 }
 
 func LampOn(lampID ...int) {
@@ -113,23 +116,22 @@ func SolenoidOff(solID int) {
 	msg.id = solID
 	msg.value = Off
 
-	g := GetMachine()
-	g.SolenoidControl <- msg
+	solenoidControl <- msg
 }
 func SolenoidFire(solID int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = 2 //should be about a 100ms pule when at 2
-	g := GetMachine()
-	g.SolenoidControl <- msg
+
+	solenoidControl <- msg
 }
 
 func SolenoidAlwaysOn(solID int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = 0x07
-	g := GetMachine()
-	g.SolenoidControl <- msg
+
+	solenoidControl <- msg
 }
 
 func FlipperControl(on bool) {
@@ -140,16 +142,15 @@ func FlipperControl(on bool) {
 	} else {
 		msg.value = 0x02
 	}
-	g := GetMachine()
-	g.SolenoidControl <- msg
+
+	solenoidControl <- msg
 }
 
 func SolenoidOnDuration(solID int, duration int) {
 	var msg deviceMessage
 	msg.id = solID
 	msg.value = duration
-	g := GetMachine()
-	g.SolenoidControl <- msg
+	solenoidControl <- msg
 }
 
 func SwitchPressed(swID int) bool {

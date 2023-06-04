@@ -9,35 +9,37 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Moving methods that should really be internal
+var lampControl chan deviceMessage
+var solenoidControl chan deviceMessage
+var displayControl chan displayMessage
+var soundControl chan soundMessage
+var pWMControl chan pwmMessage
+
 type GoFlip struct {
-	devices         arduinos
-	Scores          [4]int32
-	BallInPlay      int //If no ball, then 0.
-	ExtraBall       bool
-	TotalBalls      int
-	Credits         int
-	MaxPlayers      int //max players supported by the game
-	NumOfPlayers    int //number of players playing
-	LampControl     chan deviceMessage
-	SolenoidControl chan deviceMessage
-	SwitchEvents    chan SwitchEvent
-	DisplayControl  chan displayMessage
-	SoundControl    chan soundMessage
-	PWMControl      chan pwmMessage
-	PWMPortConfig   PWMConfig
-	switchStates    []bool
-	lampStates      map[int]int
-	Observers       []Observer
-	CurrentPlayer   int
-	ObserverEvents  chan SwitchEvent
+	devices        arduinos
+	scores         [4]int32
+	BallInPlay     int //If no ball, then 0. //used
+	ExtraBall      bool
+	TotalBalls     int       //used
+	Credits        int       //used
+	MaxPlayers     int       //max players supported by the game //used
+	NumOfPlayers   int       //number of players playing
+	PWMPortConfig  PWMConfig //used
+	switchStates   []bool
+	lampStates     map[int]int
+	Observers      []Observer //used
+	CurrentPlayer  int        //used
+	observerEvents chan SwitchEvent
 	//GameRunning      bool  //Whether a game is going on = true, or game is over = false
-	BallScore        int32 //current score for the ball in play
-	TestMode         bool  //states whether we are in Test Mode or not
-	DiagObserver     Observer
-	PlayerEndChannel chan bool
+	BallScore        int32    //current score for the ball in play
+	TestMode         bool     //states whether we are in Test Mode or not //used
+	DiagObserver     Observer //used
+	playerEndChannel chan bool
 	gameState        GState
 	playerState      PState
-	Quitting         bool //Notifies all go routines that the running application is quitting
+	Quitting         bool //Notifies all go routines that the running application is quitting //used
+	ConsoleMode      bool //Signifies that goFlip is being used for running in a console vs an actual machine //used
 }
 
 type Observer interface {
@@ -83,7 +85,6 @@ const (
 	FinishedPlayer
 )
 
-const consoleMode bool = false
 const QUIT = -1 //ID passed to channels to let goRoutines to quit
 
 type GState int
@@ -107,16 +108,15 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	g.playerState = NoPlayer
 
 	log.AddHook(MsgHook{})
-	g.PlayerEndChannel = make(chan bool)
+	g.playerEndChannel = make(chan bool)
 
-	g.LampControl = make(chan deviceMessage)
-	g.SolenoidControl = make(chan deviceMessage)
-	g.SwitchEvents = make(chan SwitchEvent, 100)
-	g.ObserverEvents = make(chan SwitchEvent, 100)
+	lampControl = make(chan deviceMessage)
+	solenoidControl = make(chan deviceMessage)
+	g.observerEvents = make(chan SwitchEvent, 100)
 
-	g.DisplayControl = make(chan displayMessage)
-	g.SoundControl = make(chan soundMessage)
-	g.PWMControl = make(chan pwmMessage)
+	displayControl = make(chan displayMessage)
+	soundControl = make(chan soundMessage)
+	pWMControl = make(chan pwmMessage)
 
 	//These can be overriddden after Init, before Start is called
 	g.MaxPlayers = 4
@@ -124,12 +124,13 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	g.BallScore = 0
 	g.TestMode = false
 	g.switchStates = make([]bool, 64)
+	log.Println("!!!Setting LampStates!!")
 	g.lampStates = make(map[int]int)
 
 	gpioInit()
 
 	//moved this before subbscribers try to connect and write
-	if !consoleMode {
+	if !g.ConsoleMode {
 		connected := false
 		for i := 0; i < 5; i++ {
 			if !g.devices.Connect() {
@@ -149,6 +150,8 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 		}
 	}
 
+	log.Println("Starting LampSubscriber()")
+
 	go LampSubscriber()
 	go SolenoidSubscriber()
 	go gpioSubscriber()
@@ -161,7 +164,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 	go func() {
 		for {
 			select {
-			case sw := <-g.ObserverEvents:
+			case sw := <-g.observerEvents:
 				g.DiagObserver.SwitchHandler(sw)
 
 				if !g.TestMode {
@@ -183,6 +186,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 	go func() {
 		log.Debugln("Starting switch monitoring")
+		g.devices.switchMatrix.consoleMode = g.ConsoleMode
 		for {
 			//buf := make([]byte, 16) //shouldn't be over 1 byte really
 			buf := g.devices.switchMatrix.ReadSwitch()
@@ -194,7 +198,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 				g.switchStates[sw.SwitchID] = sw.Pressed
 				m(sw) //main switch eventHandler called
 
-				g.ObserverEvents <- sw
+				g.observerEvents <- sw
 			}
 		}
 
@@ -205,7 +209,7 @@ func (g *GoFlip) Init(m func(SwitchEvent)) bool {
 
 func BroadcastEvent(sw SwitchEvent) {
 	g := GetMachine()
-	g.ObserverEvents <- sw
+	g.observerEvents <- sw
 }
 
 // IsGameInPlay returns true if a game is going on. False if not.
@@ -219,7 +223,7 @@ func AddScore(points int) {
 	if g.CurrentPlayer < 1 {
 		return
 	}
-	g.Scores[g.CurrentPlayer-1] += int32(points)
+	g.scores[g.CurrentPlayer-1] += int32(points)
 	g.BallScore += int32(points)
 	log.Debugf("goFlip:BallScore = %d\n", g.BallScore)
 
@@ -229,15 +233,15 @@ func AddScore(points int) {
 
 func ClearScores() {
 	g := GetMachine()
-	for i := range g.Scores {
-		g.Scores[i] = 0
+	for i := range g.scores {
+		g.scores[i] = 0
 		ShowDisplay(i+1, false)
 	}
 }
 
 func PlayerScore(playerNumber int) int32 {
 	g := GetMachine()
-	return g.Scores[playerNumber-1]
+	return g.scores[playerNumber-1]
 }
 
 func SendStats() {
@@ -251,13 +255,13 @@ func SendStats() {
 	stat.Display4 = 0
 	stat.Match = 0
 	stat.TotalBalls = g.TotalBalls
-	i := len(g.Scores)
+	i := len(g.scores)
 
 	if i > 0 {
-		stat.Player1Score = g.Scores[0]
-		stat.Player2Score = g.Scores[1]
-		stat.Player3Score = g.Scores[2]
-		stat.Player4Score = g.Scores[3]
+		stat.Player1Score = g.scores[0]
+		stat.Player2Score = g.scores[1]
+		stat.Player3Score = g.scores[2]
+		stat.Player4Score = g.scores[3]
 	}
 	statb, err := json.Marshal(stat)
 
@@ -329,8 +333,8 @@ func Quit() {
 	msg.id = QUIT
 	msg.value = 0
 
-	g.LampControl <- msg
-	g.SolenoidControl <- msg
+	lampControl <- msg
+	solenoidControl <- msg
 	BroadcastEvent(SwitchEvent{SwitchID: QUIT, Pressed: true})
 }
 
