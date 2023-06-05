@@ -52,15 +52,15 @@ type pwmMessage struct {
 
 var endLoop bool
 
-func (g *GoFlip) gpioInit() {
+func gpioInit() {
 	clearDisplays()
 	endLoop = false
 	_sound = noSound
 	go runGPIO()
 }
 
-func (g *GoFlip) gpioSubscriber() {
-	err := g.initGPIO()
+func gpioSubscriber() {
+	err := initGPIO()
 	if err != nil {
 		return
 	}
@@ -69,8 +69,9 @@ func (g *GoFlip) gpioSubscriber() {
 
 subscriberloop:
 	for {
+		//g := GetMachine()
 		select {
-		case dspMsg := <-g.DisplayControl:
+		case dspMsg := <-displayControl:
 			if dspMsg.display > 0 && dspMsg.display <= 4 {
 				setScore(dspMsg.display-1, dspMsg.value)
 			} else {
@@ -81,14 +82,14 @@ subscriberloop:
 					setCredits(int8(dspMsg.value))
 				}
 			}
-		case sndMsg := <-g.SoundControl:
+		case sndMsg := <-soundControl:
 			go func() {
 				_sound = sndMsg.soundID
 				time.Sleep(time.Millisecond * 100)
 				_sound = noSound
 			}() //doing this so that we can retrigger another sound of the same right after
 
-		case pwmMessage := <-g.PWMControl:
+		case pwmMessage := <-pWMControl:
 			log.Debugf("PWM request for %d", pwmMessage.angle)
 			go func() {
 				_servo0.Angle(pwmMessage.angle)
@@ -103,7 +104,7 @@ subscriberloop:
 	}
 }
 
-func (g *GoFlip) initGPIO() error {
+func initGPIO() error {
 	if !rpi.Present() {
 		return errors.New("not running on raspberry pi")
 	}
@@ -114,17 +115,21 @@ func (g *GoFlip) initGPIO() error {
 	}
 
 	initPorts()
-	g.initPWM()
+	initPWM()
 
 	return nil
 }
 
-func (g *GoFlip) initPWM() {
+func initPWM() {
 	// Create new connection to i2c-bus on 1 line with address 0x40.
 	// Use i2cdetect utility to find device address over the i2c-bus
-	_i2c, err := i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
+	g := GetMachine()
+
+	var err error
+
+	_i2c, err = i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("initPWM(). DeviceAddress passed is: %v, error: %v", g.PWMPortConfig.DeviceAddress, err)
 	}
 
 	o := pca9685.ServOptions{
@@ -135,7 +140,7 @@ func (g *GoFlip) initPWM() {
 
 	_pca0, err = pca9685.New(_i2c, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("initPWM()2: %v", err)
 	}
 
 	// Sets a single PWM channel 0
@@ -157,9 +162,9 @@ func clearDisplays() {
 	}
 }
 
-//dspOut, sends all of the bytes out for controlling the displays
-//Data needs to be first followed by clock followed by digits
-//MSB needs to be sent first as well
+// dspOut, sends all of the bytes out for controlling the displays
+// Data needs to be first followed by clock followed by digits
+// MSB needs to be sent first as well
 func dspOut(digits byte, clock byte, dspData byte, sndData byte) {
 	thirdReg := sndData<<4 | dspData&0x0f //no need to mask the dsp data really, but just in case
 	shiftOut(thirdReg)
@@ -168,7 +173,7 @@ func dspOut(digits byte, clock byte, dspData byte, sndData byte) {
 	pulse(pinLatchClk) //latch output of shift registers
 }
 
-//shifOut sends value "val" passed in to the '595 and latches the output
+// shifOut sends value "val" passed in to the '595 and latches the output
 func shiftOut(val byte) {
 
 	var a byte
@@ -206,11 +211,13 @@ func pulse(pin int) {
 	}
 }
 
+/*
 func setDisplay(dispNum int, digits []byte) {
 	for i, d := range digits {
 		_disp[dispNum][i] = d
 	}
 }
+*/
 
 func blankDisplay(dispNum int) {
 	_disp[dispNum] = [...]byte{blank, blank, blank, blank, blank, blank, blank} //initialize to blank disp
@@ -235,7 +242,7 @@ func numToArray(number int32) ([]byte, error) {
 	return scoreArr, nil
 }
 
-//assumption is 7 digit display, so we will blank all remaining digits the score passed in didn't set
+// assumption is 7 digit display, so we will blank all remaining digits the score passed in didn't set
 func setScore(dispNum int, score int32) {
 	scoreArr, _ := numToArray(score)
 
@@ -249,7 +256,7 @@ func setScore(dispNum int, score int32) {
 	}
 }
 
-//pretty sure match and ball in play are the same display (digits 4 and 3), Credit is 0 and 6
+// pretty sure match and ball in play are the same display (digits 4 and 3), Credit is 0 and 6
 func setBallInPlay(ball int8) {
 	ballDisp := _disp[creditMatchDisp][3:5]
 	if ball == blankScore {
@@ -269,7 +276,7 @@ func setBallInPlay(ball int8) {
 	}
 }
 
-//for some reason GamePlan uses digit 6 and 0
+// for some reason GamePlan uses digit 6 and 0
 func setCredits(credit int8) {
 
 	if credit == blankScore {
@@ -320,50 +327,48 @@ func runGPIO() {
 	}
 }
 
-func (g *GoFlip) SetDisplay(display int, value int32) {
+func SetDisplay(display int, value int32) {
 	var msg displayMessage
 	msg.display = display
 	msg.value = value
 
-	g.DisplayControl <- msg
+	displayControl <- msg
 }
 
-func (g *GoFlip) ShowDisplay(display int, on bool) {
+func ShowDisplay(display int, on bool) {
 	if on {
-		g.SetDisplay(display, 0)
+		SetDisplay(display, 0)
 		log.Debugf("ShowDisplay called setting disp on for %d\n", display)
 	} else {
-		g.SetDisplay(display, blankScore)
+		SetDisplay(display, blankScore)
 	}
 }
 
-func (g *GoFlip) SetCreditDisp(value int8) {
-	g.SetDisplay(creditDisp, int32(value))
+func SetCreditDisp(value int8) {
+	SetDisplay(creditDisp, int32(value))
 }
 
-func (g *GoFlip) SetBallInPlayDisp(value int8) {
-	g.SetDisplay(ballInPlayDisp, int32(value))
+func SetBallInPlayDisp(value int8) {
+	SetDisplay(ballInPlayDisp, int32(value))
 }
 
-func (g *GoFlip) PlaySound(soundID byte) {
+func PlaySound(soundID byte) {
 	var msg soundMessage
 	msg.soundID = soundID
 
-	g.SoundControl <- msg
+	soundControl <- msg
 
 }
 
-func (g *GoFlip) DebugOutDisplays() {
+func DebugOutDisplays() {
 	for i, val := range _disp {
 		log.Debugf("Display Array %d: ", i)
 		log.Debugln(val)
 	}
 }
 
-func (g *GoFlip) ServoAngle(angle int) {
+func ServoAngle(angle int) {
 	var msg pwmMessage
-
 	msg.angle = angle
-
-	g.PWMControl <- msg
+	pWMControl <- msg
 }

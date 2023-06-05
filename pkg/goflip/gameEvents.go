@@ -22,9 +22,11 @@ BallDrained = called when a ball is now found in the outhole
 BallInPlay = called when a ball is launched
 */
 
-//GameStart is called when a game is started (when the first player gets a credit)
-func (g *GoFlip) GameStart() {
+// GameStart is called when a game is started (when the first player gets a credit)
+func GameStart() {
 	log.Debugln("gameEvents:GameStart()")
+
+	g := GetMachine()
 
 	if g.TestMode {
 		return
@@ -34,7 +36,7 @@ func (g *GoFlip) GameStart() {
 	g.BallInPlay = 0 //nextup will queue this up
 	g.NumOfPlayers = 0
 	g.CurrentPlayer = 0
-	g.ClearScores()
+	ClearScores()
 
 	for _, f := range g.Observers {
 		f.GameStart()
@@ -42,9 +44,10 @@ func (g *GoFlip) GameStart() {
 
 }
 
-//GameOver should be called when it is game over.
-func (g *GoFlip) GameOver() {
-	g.SetBallInPlayDisp(blankScore)
+// GameOver should be called when it is game over.
+func GameOver() {
+	g := GetMachine()
+	SetBallInPlayDisp(blankScore)
 
 	log.Debugln("gameEvents:GameOver()")
 
@@ -60,8 +63,10 @@ func (g *GoFlip) GameOver() {
 
 }
 
-func (g *GoFlip) BallDrained() {
+func BallDrained() {
 	log.Debugln("BallDrained() called")
+
+	g := GetMachine()
 
 	if g.TestMode {
 		return
@@ -72,8 +77,10 @@ func (g *GoFlip) BallDrained() {
 	}
 }
 
-func (g *GoFlip) PlayerFinish() {
+func PlayerFinish() {
 	log.Debugln("PlayerFinish() called")
+
+	g := GetMachine()
 
 	if g.TestMode {
 		return
@@ -84,7 +91,8 @@ func (g *GoFlip) PlayerFinish() {
 	}
 }
 
-func (g *GoFlip) PlayerEnd() {
+func PlayerEnd() {
+	g := GetMachine()
 	if g.TestMode {
 		return
 	}
@@ -98,12 +106,14 @@ func (g *GoFlip) PlayerEnd() {
 
 	go func() {
 		wait.Wait() //need to wait for all observers to be done with any goroutines.
-		g.ChangePlayerState(PlayerUp)
+		ChangePlayerState(UpPlayer)
 	}()
 }
 
-func (g *GoFlip) PlayerUp() {
-	if g.gameState != GameStart {
+func PlayerUp() {
+	g := GetMachine()
+
+	if g.gameState != InProgress {
 		log.Warnln("PlayerUp called, but game is not started")
 		return
 	}
@@ -131,12 +141,12 @@ func (g *GoFlip) PlayerUp() {
 			g.CurrentPlayer = 1
 		} else {
 			//game over
-			g.ChangeGameState(GameOver)
+			ChangeGameState(GameEnded)
 			return
 		}
 	}
 
-	g.SetBallInPlayDisp(int8(g.BallInPlay))
+	SetBallInPlayDisp(int8(g.BallInPlay))
 
 	if g.BallInPlay == 1 {
 		for _, f := range g.Observers {
@@ -149,8 +159,9 @@ func (g *GoFlip) PlayerUp() {
 	}
 }
 
-func (g *GoFlip) AddPlayer() {
+func AddPlayer() {
 	log.Debugln("AddPlayer() called")
+	g := GetMachine()
 
 	if g.TestMode {
 		return
@@ -164,7 +175,7 @@ func (g *GoFlip) AddPlayer() {
 	if g.NumOfPlayers < g.MaxPlayers {
 		g.NumOfPlayers++
 
-		g.ShowDisplay(g.NumOfPlayers, true)
+		ShowDisplay(g.NumOfPlayers, true)
 		log.Debugf("ShowDisplay was called passing: %d, true", g.NumOfPlayers)
 
 		for _, f := range g.Observers {

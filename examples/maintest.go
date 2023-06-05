@@ -137,7 +137,7 @@ func identifyArduino(port string) (ret int, err error) {
 	buf := make([]byte, 128)
 	n, err := s.Read(buf)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("IdentifyArduino(): %v", err)
 	}
 
 	//last character should be what we got back.

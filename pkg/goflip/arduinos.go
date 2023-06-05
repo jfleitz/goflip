@@ -41,7 +41,7 @@ func (a *arduinos) ReadPorts() {
 	contents, err := os.ReadDir("/dev")
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("ReadPorts(): %v", err)
 		return
 	}
 
@@ -57,15 +57,17 @@ func (a *arduinos) ReadPorts() {
 	}
 }
 
-//PortConnect connects to the device at port and returns an open connection
+// PortConnect connects to the device at port and returns an open connection
 func (a *arduinos) PortConnect(port string) (serial.Port, error) {
 	mode := &serial.Mode{
 		BaudRate: 38400,
 	}
 
+	log.Debugf("Opening Port %s\n", port)
+
 	s, err := serial.Open(port, mode)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("PortConnect(): %v", err)
 	}
 
 	return s, err
@@ -102,7 +104,7 @@ func (a *arduinos) Connect() bool {
 		buf := make([]byte, 128)
 		_, err = s.Read(buf)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Connect(): %v", err)
 		}
 
 		//first character should be what we got back.
@@ -205,12 +207,16 @@ func (a *arduino) SendMessage(d deviceMessage) error {
 	tosend[1] = (byte)(d.id)
 	tosend[2] = (byte)(d.value)
 
+	if a.consoleMode {
+		log.Printf("arduino write [%v]:%v", a.port, tosend)
+		return nil
+	}
 	//	log.Debugf("Sending arduino message for %d:%d to %s", d.id, d.value, a.port)
 	_, err := a.conn.Write(tosend)
 	return err
 }
 
-//Short Message format is 1 byte long. Top 5 bits is the ID, bottom 3 bits are the value
+// Short Message format is 1 byte long. Top 5 bits is the ID, bottom 3 bits are the value
 func (a *arduino) SendShortMessage(d deviceMessage, cmdSize int) error {
 	b := make([]byte, 1)
 
