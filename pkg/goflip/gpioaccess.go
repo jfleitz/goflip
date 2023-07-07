@@ -90,7 +90,6 @@ subscriberloop:
 			}() //doing this so that we can retrigger another sound of the same right after
 
 		case pwmMessage := <-pWMControl:
-			log.Debugf("PWM request for %d", pwmMessage.angle)
 			go func() {
 				_servo0.Angle(pwmMessage.angle)
 			}()
@@ -144,7 +143,7 @@ func initPWM() {
 	}
 
 	// Sets a single PWM channel 0
-	//_pca0.SetChannel(0, 0, 180) //JAF maybe not need this? TEST
+	_pca0.SetChannel(0, 0, 180)
 
 	// Servo on channel 0
 	_servo0 = _pca0.ServoNew(0, &o)
