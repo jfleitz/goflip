@@ -61,6 +61,7 @@ func GameOver() {
 		f.GameOver()
 	}
 
+	ChangePlayerState(NoPlayer)
 }
 
 func BallDrained() {
