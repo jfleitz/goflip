@@ -23,7 +23,7 @@ build_rpi:
 	@echo "Building for Raspberry PI"
 	export GOOS=linux
 	export GOARCH=arm
-	export GOARM=6
+	export GOARM=7
 	@go build pkg/goflip/*.go
 
 

@@ -4,27 +4,29 @@ import (
 	"errors"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"periph.io/x/periph/conn/gpio"
-	"periph.io/x/periph/host"
-	"periph.io/x/periph/host/rpi"
-
 	"github.com/googolgl/go-i2c"
 	"github.com/googolgl/go-pca9685"
+	log "github.com/sirupsen/logrus"
+	"periph.io/x/conn/v3/gpio"
+	"periph.io/x/host/v3"
+	"periph.io/x/host/v3/rpi"
 )
 
 var _disp [5][7]byte //this holds what we want to show on the display. Bytes are in terms of what the 74ls48 supports (0x0f is blank)
 var _sound byte
-var _i2c *i2c.Options
+
+var _i2cServo *i2c.Options
 var _pca0 *pca9685.PCA9685
 var _servo0 *pca9685.Servo
 
+var _i2cDisplay *i2c.Options
+var _dsp *I2CDisplay
+
 const (
-	blank           byte = 0x0f //what is sent to the 7448 on the display board to blank the 7 seg disp
-	blankScore           = -1   //the numeric number that can be passed in as an integer to clear the display
-	creditMatchDisp      = 4    //the number in the display array for the credit display
-	creditLSD            = 6    //position in the display array for the 1's credit disp digit
-	creditMSD            = 0    //position in the display array for the 10's credit disp digit
+	blankScore      = -1 //the numeric number that can be passed in as an integer to clear the display
+	creditMatchDisp = 0  //the number in the display array for the credit display
+	creditLSD       = 6  //position in the display array for the 1's credit disp digit
+	creditMSD       = 5  //position in the display array for the 10's credit disp digit
 
 	pinDataClk     = 15
 	pinLatchClk    = 16
@@ -53,10 +55,11 @@ type pwmMessage struct {
 var endLoop bool
 
 func gpioInit() {
-	clearDisplays()
+	//clearDisplays()
+
 	endLoop = false
 	_sound = noSound
-	go runGPIO()
+	//go runGPIO()
 }
 
 func gpioSubscriber() {
@@ -73,27 +76,32 @@ subscriberloop:
 		select {
 		case dspMsg := <-displayControl:
 			if dspMsg.display > 0 && dspMsg.display <= 4 {
-				setScore(dspMsg.display-1, dspMsg.value)
+				_dsp.SetDisplay(int8(dspMsg.display), dspMsg.value)
 			} else {
 				switch dspMsg.display {
 				case ballInPlayDisp:
-					setBallInPlay(int8(dspMsg.value))
+					//TODO fix this for the i2c support
+					_dsp.SetBallInPlay(int8(dspMsg.value))
 				case creditDisp:
-					setCredits(int8(dspMsg.value))
+					_dsp.SetCredits(int8(dspMsg.value))
 				}
 			}
 		case sndMsg := <-soundControl:
 			go func() {
-				_sound = sndMsg.soundID
+				//_sound = sndMsg.soundID
+				stageSound(sndMsg.soundID)
 				time.Sleep(time.Millisecond * 100)
-				_sound = noSound
+				//_sound = noSound //???
+				stageSound(noSound)
+
 			}() //doing this so that we can retrigger another sound of the same right after
 
 		case pwmMessage := <-pWMControl:
+			//	log.Debugf("PWM angle is %v", pwmMessage.angle)
 			go func() {
 				_servo0.Angle(pwmMessage.angle)
 			}()
-		case <-time.After(time.Millisecond * 100):
+		case <-time.After(time.Millisecond * 300):
 			if endLoop {
 				log.Debugln("gpioSubscriber has ended")
 				break subscriberloop
@@ -114,21 +122,26 @@ func initGPIO() error {
 	}
 
 	initPorts()
-	initPWM()
+	initI2C()
 
 	return nil
 }
 
-func initPWM() {
+func initI2C() {
 	// Create new connection to i2c-bus on 1 line with address 0x40.
 	// Use i2cdetect utility to find device address over the i2c-bus
 	g := GetMachine()
 
 	var err error
 
-	_i2c, err = i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
+	_i2cServo, err = i2c.New(pca9685.Address, g.PWMPortConfig.DeviceAddress)
 	if err != nil {
-		log.Fatalf("initPWM(). DeviceAddress passed is: %v, error: %v", g.PWMPortConfig.DeviceAddress, err)
+		log.Fatalf("initI2C(). DeviceAddress passed is: %v, error: %v", g.PWMPortConfig.DeviceAddress, err)
+	}
+
+	_i2cDisplay, err = i2c.New(0x11, g.PWMPortConfig.DeviceAddress)
+	if err != nil {
+		log.Fatalf("init failed for i2cDisplay. DeviceAddress passed is: %v, error: %v", g.PWMPortConfig.DeviceAddress, err)
 	}
 
 	o := pca9685.ServOptions{
@@ -137,7 +150,7 @@ func initPWM() {
 		MaxPulse: g.PWMPortConfig.PulseMax, //2500,
 	}
 
-	_pca0, err = pca9685.New(_i2c, nil)
+	_pca0, err = pca9685.New(_i2cServo, nil)
 	if err != nil {
 		log.Fatalf("initPWM()2: %v", err)
 	}
@@ -147,30 +160,61 @@ func initPWM() {
 
 	// Servo on channel 0
 	_servo0 = _pca0.ServoNew(0, &o)
-}
 
-func initPorts() {
-	rpi.P1_13.Out(gpio.Low)
-	rpi.P1_15.Out(gpio.Low)
-	rpi.P1_16.Out(gpio.Low)
-}
-
-func clearDisplays() {
-	for i := 0; i < len(_disp); i++ {
-		blankDisplay(i)
+	_dsp, err = NewDisplay(_i2cDisplay)
+	if err != nil {
+		log.Fatalf("initPWM/NewDisplay failed: %v", err)
 	}
 }
 
+func initPorts() {
+	//Init Ports
+	rpi.P1_13.Out(gpio.Low) //Data
+	rpi.P1_15.Out(gpio.Low) //Clock
+	rpi.P1_16.Out(gpio.Low) //Latch
+
+}
+
+/*
 // dspOut, sends all of the bytes out for controlling the displays
 // Data needs to be first followed by clock followed by digits
 // MSB needs to be sent first as well
 func dspOut(digits byte, clock byte, dspData byte, sndData byte) {
-	thirdReg := sndData<<4 | dspData&0x0f //no need to mask the dsp data really, but just in case
+	var bank0, thirdReg byte
+	thirdReg = (sndData << 4) | (dspData & 0x0f) //no need to mask the dsp data really, but just in case
+	bank0 = (^digits) & 0x7f                     //send the inverse now, since we have a 7416 inverter in place, also reset the enable
+
+	rpi.P1_15.Out(gpio.Low) //clock low
+	rpi.P1_16.Out(gpio.Low) //latch low
+	//rpi.P1_15.Out(gpio.High) //clock high
+
 	shiftOut(thirdReg)
-	shiftOut(clock)
-	shiftOut(digits)
-	pulse(pinLatchClk) //latch output of shift registers
-}
+	shiftOut(0)    //always shift out zero first on the clocks
+	shiftOut(0x7f) //keeping the digit off for now and enable high so that we can latch in new data
+
+	rpi.P1_15.Out(gpio.Low)  //clock low
+	rpi.P1_16.Out(gpio.High) //latch High
+	//rpi.P1_15.Out(gpio.High) //clock high
+
+	//pulse(pinLatchClk) //latch output of shift registers
+
+	time.Sleep(time.Nanosecond * 25) //time to setup 74ls379
+	//-----------------
+	rpi.P1_15.Out(gpio.Low) //clock low
+	rpi.P1_16.Out(gpio.Low) //latch low
+	//rpi.P1_15.Out(gpio.High) //clock high
+
+	shiftOut(thirdReg)
+	shiftOut(clock) //then shift out the actual clock
+	shiftOut(bank0) //keep the enable low, and now have the digit turned on
+	//pulse(pinLatchClk) //latch output of shift registers
+
+	rpi.P1_15.Out(gpio.Low)  //clock low
+	rpi.P1_16.Out(gpio.High) //latch High
+	//rpi.P1_15.Out(gpio.High) //clock high
+
+	time.Sleep(time.Microsecond * 10) //time to setup 74ls379 + to see the digit
+}*/
 
 // shifOut sends value "val" passed in to the '595 and latches the output
 func shiftOut(val byte) {
@@ -180,13 +224,14 @@ func shiftOut(val byte) {
 	a = 0x80 //msb first
 
 	for b := 1; b <= 8; b++ {
+		rpi.P1_15.Out(gpio.Low)
 		if val&a > 0 {
 			rpi.P1_13.Out(gpio.High)
 		} else {
 			rpi.P1_13.Out(gpio.Low)
 		}
-
-		pulse(pinDataClk) //pulse clock line
+		rpi.P1_15.Out(gpio.High)
+		time.Sleep(time.Microsecond * 2) //time for 595
 		a >>= 1
 	}
 }
@@ -218,104 +263,46 @@ func setDisplay(dispNum int, digits []byte) {
 }
 */
 
-func blankDisplay(dispNum int) {
-	_disp[dispNum] = [...]byte{blank, blank, blank, blank, blank, blank, blank} //initialize to blank disp
+func stageSound(sndCode byte) {
+	log.Debugf("******Writing sound out for %v", sndCode)
+
+	rpi.P1_16.Out(gpio.Low) //latch low
+	//rpi.P1_15.Out(gpio.High) //clock high
+
+	shiftOut(sndCode)
+	rpi.P1_16.Out(gpio.High)          //latch High
+	rpi.P1_15.Out(gpio.Low)           //clock low
+	time.Sleep(time.Microsecond * 20) //present sound
+
+	//send out clear sound
+
 }
 
-func numToArray(number int32) ([]byte, error) {
-	var scoreArr []byte
-
-	var remainder int32
-	tmpScore := number
-
-	for {
-		remainder = tmpScore % 10
-		scoreArr = append(scoreArr, byte(remainder))
-		tmpScore /= 10
-
-		if tmpScore == 0 {
-			break
-		}
-	}
-
-	return scoreArr, nil
-}
-
-// assumption is 7 digit display, so we will blank all remaining digits the score passed in didn't set
-func setScore(dispNum int, score int32) {
-	scoreArr, _ := numToArray(score)
-
-	_disp[dispNum] = [...]byte{blank, blank, blank, blank, blank, blank, blank} //initialize to blank disp
-
-	if score != blankScore {
-		//copy the score into the display array
-		for i, num := range scoreArr {
-			_disp[dispNum][i] = num
-		}
-	}
-}
-
-// pretty sure match and ball in play are the same display (digits 4 and 3), Credit is 0 and 6
-func setBallInPlay(ball int8) {
-	ballDisp := _disp[creditMatchDisp][3:5]
-	if ball == blankScore {
-		ballDisp[0] = blank
-		ballDisp[1] = blank
-		return
-	}
-
-	ballArr, _ := numToArray(int32(ball))
-
-	if len(ballArr) == 2 {
-		ballDisp[0] = ballArr[0]
-		ballDisp[1] = ballArr[1]
-	} else {
-		ballDisp[0] = ballArr[0]
-		ballDisp[1] = blank
-	}
-}
-
-// for some reason GamePlan uses digit 6 and 0
-func setCredits(credit int8) {
-
-	if credit == blankScore {
-		_disp[creditMatchDisp][creditMSD] = blank
-		_disp[creditMatchDisp][creditLSD] = blank
-		return
-	}
-
-	creditArr, _ := numToArray(int32(credit))
-
-	if len(creditArr) == 2 {
-		_disp[creditMatchDisp][creditLSD] = creditArr[0]
-		_disp[creditMatchDisp][creditMSD] = creditArr[1]
-	} else {
-		_disp[creditMatchDisp][creditLSD] = creditArr[0]
-		_disp[creditMatchDisp][creditMSD] = blank
-	}
-}
-
+/*
+// TODO replace this...
 func runGPIO() {
-	var digit, display, data, digitStrobe byte
+	var digit, display, data, digitStrobe, clkOut byte
 
 	for {
 		digitStrobe = 0x01
 		//data = 0x06
 
 		for digit = 0; digit < 7; digit++ {
-			var clkOut byte = 0x01
-			for display = 0; display < 4; display++ {
+			clkOut = 0x01
+			for display = 0; display <= 3; display++ {
 				data = _disp[display][digit]
 
-				dspOut(0, clkOut, data, _sound)
+				dspOut(0, clkOut, data, _sound) //keep digit strobe 0 until we get all display latches loaded
 				clkOut <<= 1
 			}
 
-			//strobing the digit here, which is why we took it out of the other for loop
-			data = _disp[creditMatchDisp][digit]
+			data = _disp[4][digit]
+			clkOut = 0x10 //force to 5 display
+			dspOut(0, clkOut, data, _sound)
 			dspOut(digitStrobe, clkOut, data, _sound)
-			digitStrobe <<= 1                  //shifting over for the next digit
-			time.Sleep(100 * time.Microsecond) //230 ms should be 120hz to the displays?
+			digitStrobe <<= 1
+
+			time.Sleep(200 * time.Microsecond) //230 ms should be 120hz to the displays?
 		}
 
 		if endLoop {
@@ -324,7 +311,7 @@ func runGPIO() {
 
 		//loop forever
 	}
-}
+}*/
 
 func SetDisplay(display int, value int32) {
 	var msg displayMessage

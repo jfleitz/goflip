@@ -225,10 +225,10 @@ func AddScore(points int) {
 	}
 	g.scores[g.CurrentPlayer-1] += int32(points)
 	g.BallScore += int32(points)
-	log.Debugf("goFlip:BallScore = %d\n", g.BallScore)
+	log.Debugf("goFlip:BallScore = %d, total = %d\n", g.BallScore, g.scores[g.CurrentPlayer-1])
 
 	//refresh display
-	SetDisplay(g.CurrentPlayer, PlayerScore(g.CurrentPlayer))
+	SetDisplay(g.CurrentPlayer, g.scores[g.CurrentPlayer-1])
 }
 
 func ClearScores() {
